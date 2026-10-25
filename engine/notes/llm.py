@@ -12,7 +12,10 @@ def chat(model: str, prompt: str, schema: dict | None = None) -> str:
         "model": model,
         "stream": False,
         "options": {"num_ctx": 8192, "temperature": 0.2},
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [
+            {"role": "system", "content": "Never use em dashes. Use commas, colons, periods or hyphens instead."},
+            {"role": "user", "content": prompt},
+        ],
     }
     if schema:
         body["format"] = schema
@@ -22,7 +25,8 @@ def chat(model: str, prompt: str, schema: dict | None = None) -> str:
             break
         time.sleep(10)
     r.raise_for_status()
-    return r.json()["message"]["content"]
+    # models ignore the instruction now and then, so enforce it
+    return r.json()["message"]["content"].replace(" — ", ", ").replace("—", "-")
 
 
 def chunk(segs: list[dict], limit: int = CHUNK_CHARS) -> list[str]:

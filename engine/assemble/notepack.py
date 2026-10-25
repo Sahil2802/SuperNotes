@@ -6,7 +6,7 @@ import genanki
 
 def notepack_md(st: dict, summary: str, segs: list[dict], ex: dict) -> str:
     md = [f"# {st['title']}", f"*{st.get('course') or 'No course'}*", "", "## Summary", "", summary, ""]
-    md += ["## Terms", ""] + [f"- **{t['term']}** — {t['definition']}" for t in ex["terms"]]
+    md += ["## Terms", ""] + [f"- **{t['term']}**: {t['definition']}" for t in ex["terms"]]
     md += ["", "## Action items", ""] + [f"- {a}" for a in ex["actions"]]
     md += ["", "## Flashcards", ""] + [f"**Q:** {c['question']}  \n**A:** {c['answer']}\n" for c in ex["flashcards"]]
     md += ["", "## Transcript", ""] + [f"`{int(s['start'] // 60)}:{int(s['start'] % 60):02d}` {s['text']}" for s in segs]

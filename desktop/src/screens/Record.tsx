@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api/client";
 import { useMeter } from "../api/socket";
+import { Sprite } from "../Pixel";
 import { fmtDur } from "./Library";
 
 const SOURCES = [
@@ -27,34 +28,35 @@ export default function Record({ done }: { done: (id: string) => void }) {
 
   return (
     <div className="space-y-4">
-      <p className="rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+      <div className="flex justify-center py-2"><Sprite name="mic" size={8} /></div>
+      <p className="px-card p-3 text-sm text-muted">
         Recording may require permission from your school or instructor and, in some places, everyone present.
       </p>
       {!id && (
         <div className="flex flex-wrap items-center gap-3">
           {SOURCES.map(([s, label]) => (
-            <label key={s} className="flex items-center gap-1 text-sm">
-              <input type="radio" checked={source === s} onChange={() => setSource(s)} />
+            <label key={s} className="flex items-center gap-2 font-pixel text-base">
+              <input type="radio" className="accent-yellow-400" checked={source === s} onChange={() => setSource(s)} />
               {label}
             </label>
           ))}
-          <input className="rounded border px-2 py-1 text-sm" placeholder="Course (optional)" value={course} onChange={(e) => setCourse(e.target.value)} />
+          <input className="px-nick border-2 border-edge bg-ink px-2 py-1 text-sm text-fg" placeholder="Course (optional)" value={course} onChange={(e) => setCourse(e.target.value)} />
         </div>
       )}
       {id && (
         <div className="space-y-2">
-          <div className="flex items-center gap-2 text-red-600">
-            <span className="h-3 w-3 animate-pulse rounded-full bg-red-600" /> Recording {fmtDur(meter.seconds)}
+          <div className="flex items-center gap-2 font-pixel text-xl text-red-400">
+            <span className="h-3 w-3 animate-pulse bg-red-500" /> Recording {fmtDur(meter.seconds)}
           </div>
-          <div className="h-3 w-full overflow-hidden rounded bg-slate-200">
-            <div className="h-full bg-green-500 transition-[width] duration-100" style={{ width: `${Math.min(100, meter.level * 400)}%` }} />
+          <div className="h-4 w-full px-nick overflow-hidden border-2 border-edge bg-black">
+            <div className="h-full bg-green-400 transition-[width] duration-100" style={{ width: `${Math.min(100, meter.level * 400)}%` }} />
           </div>
-          {meter.error && <p className="text-sm text-red-600">Recording problem: {meter.error}. What was captured so far is saved — stop to keep it.</p>}
+          {meter.error && <p className="text-sm text-red-400">Recording problem: {meter.error}. What was captured so far is saved. Stop to keep it.</p>}
         </div>
       )}
-      {err && <p className="text-sm text-red-600">{err.message}</p>}
+      {err && <p className="text-sm text-red-400">{err.message}</p>}
       <button
-        className={`rounded px-6 py-3 text-lg font-medium text-white ${id ? "bg-slate-800" : "bg-red-600"} disabled:opacity-50`}
+        className={`px-btn ${id ? "ghost" : "red"} px-6 py-3 text-xl disabled:opacity-50`}
         disabled={start.isPending || stop.isPending}
         onClick={() => (id ? stop.mutate() : start.mutate())}
       >

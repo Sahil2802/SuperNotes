@@ -55,6 +55,7 @@ app.whenReady().then(async () => {
       nodeIntegration: false,
     },
   });
+  win.removeMenu();
   if (process.env.VITE_DEV_URL) win.loadURL(process.env.VITE_DEV_URL);
   else win.loadFile(path.join(app.getAppPath(), "dist", "index.html"));
 });

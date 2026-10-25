@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, Lecture } from "../api/client";
+import { Sprite } from "../Pixel";
 
 export const fmtDur = (s: number) => {
   const h = Math.floor(s / 3600);
@@ -9,16 +10,23 @@ export const fmtDur = (s: number) => {
 
 const IDLE = ["ready", "failed", "cancelled", "recorded"];
 const color: Record<string, string> = {
-  ready: "bg-green-100 text-green-800",
-  failed: "bg-red-100 text-red-800",
-  cancelled: "bg-slate-200 text-slate-700",
-  recording: "bg-red-100 text-red-800",
-  recorded: "bg-slate-100 text-slate-700",
+  ready: "bg-green-400 text-green-950",
+  failed: "bg-red-400 text-red-950",
+  cancelled: "bg-slate-400 text-slate-900",
+  recording: "bg-red-400 text-red-950",
+  recorded: "bg-indigo-200 text-indigo-950",
+};
+
+const LABEL: Record<string, string> = {
+  transcribe: "transcribing",
+  summarize: "summarising",
+  extract: "extracting",
+  assemble: "assembling",
 };
 
 export const Badge = ({ l }: { l: Lecture }) => (
-  <span className={`rounded px-2 py-0.5 text-xs ${color[l.state] ?? "bg-blue-100 text-blue-800"}`}>
-    {l.state}
+  <span className={`cursor-default select-none px-nick font-pixel px-2 py-0.5 text-sm ${color[l.state] ?? "bg-coin text-yellow-950"}`}>
+    {LABEL[l.state] ?? l.state}
     {l.state === "transcribe" && l.progress ? ` ${Math.round(l.progress * 100)}%` : ""}
   </span>
 );
@@ -35,20 +43,21 @@ export default function Library({ open }: { open: (id: string) => void }) {
   const reprocess = useMutation({ mutationFn: api.process, onSuccess: refresh });
   const rename = useMutation({ mutationFn: (v: { id: string; title: string }) => api.patch(v.id, { title: v.title }), onSuccess: refresh });
 
-  if (!q.data?.length) return <p className="text-slate-500">No lectures yet. Hit Record to start one.</p>;
+  if (!q.data?.length) return <p className="font-pixel text-lg text-muted">No lectures yet. Hit Record to start one.</p>;
   return (
-    <ul className="divide-y rounded border">
+    <ul className="space-y-4">
       {q.data.map((l) => (
-        <li key={l.id} className="flex items-center gap-3 p-3">
+        <li key={l.id} className="px-card flex items-center gap-4 p-4">
+          <Sprite name="book" size={4} />
           <button className="flex-1 text-left" onClick={() => open(l.id)}>
-            <div className="font-medium">{l.title}</div>
-            <div className="text-xs text-slate-500">
+            <div className="font-pixel text-xl text-fg">{l.title}</div>
+            <div className="text-xs text-muted">
               {l.course ?? "No course"} · {new Date(l.created * 1000).toLocaleString()} · {fmtDur(l.duration)}
             </div>
           </button>
           <Badge l={l} />
           <button
-            className="text-xs underline"
+            className="px-link text-sm"
             onClick={() => {
               const t = prompt("Rename lecture", l.title);
               if (t) rename.mutate({ id: l.id, title: t });
@@ -57,11 +66,11 @@ export default function Library({ open }: { open: (id: string) => void }) {
             rename
           </button>
           {IDLE.includes(l.state) && l.state !== "recording" && (
-            <button className="text-xs underline" onClick={() => reprocess.mutate(l.id)}>
+            <button className="px-link text-sm" onClick={() => reprocess.mutate(l.id)}>
               {l.state === "ready" ? "re-process" : "process"}
             </button>
           )}
-          <button className="text-xs text-red-600 underline" onClick={() => confirm("Delete this lecture and all its files?") && del.mutate(l.id)}>
+          <button className="px-link text-sm text-red-400" onClick={() => confirm("Delete this lecture and all its files?") && del.mutate(l.id)}>
             delete
           </button>
         </li>
