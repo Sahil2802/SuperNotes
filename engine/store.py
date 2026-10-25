@@ -1,12 +1,17 @@
 """Lecture metadata + per-stage status, persisted as <data_dir>/lectures/<id>/status.json."""
+from __future__ import annotations
+
 import json
 import shutil
 import threading
 import time
 import uuid
+from datetime import date
 from pathlib import Path
 
 import yaml
+
+import cards as cardlib
 
 STAGES = ["transcribe", "summarize", "extract", "assemble"]
 DEFAULT_CONFIG = {
@@ -14,6 +19,7 @@ DEFAULT_CONFIG = {
     "whisper_device": "auto",  # auto | cuda | cpu
     "ollama_model": "llama3.1:8b",
     "glossary": [],
+    "new_cards_per_day": 20,
 }
 
 
@@ -50,16 +56,19 @@ class Store:
     def save(self, st: dict):
         with self._lock:
             p = self.dir(st["id"]) / "status.json"
-            tmp = p.with_suffix(".tmp")
-            tmp.write_text(json.dumps(st, indent=2))
-            for attempt in range(5):  # Windows: antivirus/indexers can briefly hold the target
-                try:
-                    tmp.replace(p)
-                    return
-                except PermissionError:
-                    if attempt == 4:
-                        raise
-                    time.sleep(0.05)
+            self._atomic(p, json.dumps(st, indent=2))
+
+    def _atomic(self, p: Path, text: str):
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(text, encoding="utf-8")
+        for attempt in range(5):  # Windows: antivirus/indexers can briefly hold the target
+            try:
+                tmp.replace(p)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.05)
 
     def get(self, lid: str) -> dict:
         with self._lock:
@@ -105,3 +114,49 @@ class Store:
 
     def write_json(self, lid: str, name: str, obj):
         (self.dir(lid) / name).write_text(json.dumps(obj, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    def _cards_file(self, lid: str) -> dict:
+        f = self.read_json(lid, "cards.json")
+        if f is None:
+            f = {"cards": [], "seen": []}
+            ex = self.read_json(lid, "extract.json")
+            if ex:
+                cardlib.merge(f, ex["flashcards"])
+        return f
+
+    def cards(self, lid: str) -> list[dict]:
+        with self._lock:
+            f = self._cards_file(lid)
+            if self.read_json(lid, "cards.json") is None and f["cards"]:
+                self._atomic(self.dir(lid) / "cards.json", json.dumps(f, indent=2, ensure_ascii=False))
+            return f["cards"]
+
+    def edit_cards(self, lid: str, fn):
+        """Run fn(file) on {"cards", "seen"} under the lock and save the result; returns fn's return value."""
+        with self._lock:
+            f = self._cards_file(lid)
+            out = fn(f)
+            self._atomic(self.dir(lid) / "cards.json", json.dumps(f, indent=2, ensure_ascii=False))
+            return out
+
+    def sync_cards(self, lid: str):
+        ex = self.read_json(lid, "extract.json") or {"flashcards": []}
+        self.edit_cards(lid, lambda f: cardlib.merge(f, ex["flashcards"]))
+
+    def _review(self) -> dict:
+        try:
+            r = json.loads((self.root.parent / "review.json").read_text())
+        except (OSError, ValueError):
+            r = {}
+        today = date.today().isoformat()
+        return r if r.get("date") == today else {"date": today, "new": 0}
+
+    def new_today(self) -> int:
+        with self._lock:
+            return self._review()["new"]
+
+    def add_new_today(self, n: int = 1):
+        with self._lock:
+            r = self._review()
+            r["new"] += n
+            self._atomic(self.root.parent / "review.json", json.dumps(r))
