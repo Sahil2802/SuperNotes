@@ -5,6 +5,7 @@ import threading
 
 from assemble.notepack import notepack_md, write_apkg
 from notes.extract import extract
+from notes.llm import Cancelled
 from notes.summarize import summarize
 from store import STAGES, Store
 from transcribe.whisper_run import merge_segments, transcribe, write_vtt
@@ -12,10 +13,6 @@ from transcribe.whisper_run import merge_segments, transcribe, write_vtt
 log = logging.getLogger(__name__)
 IDLE = ("recording", "recorded", "ready", "failed", "cancelled")
 BUSY = ("queued", *STAGES)
-
-
-class Cancelled(Exception):
-    pass
 
 
 class Pipeline:

@@ -34,7 +34,7 @@ def extract(segs: list[dict], model: str, cancelled=lambda: False) -> dict:
         ex = None
         for _ in range(2):  # retry once on invalid output, then skip the chunk
             try:
-                ex = Extraction.model_validate_json(chat(model, prompt.format(text=c), Extraction.model_json_schema()))
+                ex = Extraction.model_validate_json(chat(model, prompt.format(text=c), Extraction.model_json_schema(), cancelled))
                 break
             except (ValidationError, ValueError) as e:
                 log.warning("chunk %d invalid extraction: %s", i, e)

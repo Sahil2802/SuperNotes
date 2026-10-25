@@ -12,7 +12,7 @@ def summarize(segs: list[dict], model: str, cancelled=lambda: False) -> str:
     for c in chunk(segs):
         if cancelled():
             return ""
-        parts.append(chat(model, (PROMPTS / "map.txt").read_text().format(text=c)))
+        parts.append(chat(model, (PROMPTS / "map.txt").read_text().format(text=c), cancelled=cancelled))
     if len(parts) == 1:
         return parts[0]
     # ponytail: single reduce pass; many-hour lectures would need a tree reduce
