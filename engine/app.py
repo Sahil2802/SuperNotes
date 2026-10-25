@@ -49,6 +49,11 @@ class AnswerReq(BaseModel):
     grade: int = Field(ge=1, le=5)
 
 
+class ProfileReq(BaseModel):
+    name: str = Field(min_length=1)
+    subjects: list[str] = []
+
+
 def whisper_present(model: str) -> bool:
     try:
         from faster_whisper.utils import download_model
@@ -91,6 +96,18 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
         if not p.exists():
             raise HTTPException(404, f"{name} not available")
         return FileResponse(p, **kw)
+
+    @app.get("/profile", dependencies=[Depends(auth)])
+    def get_profile():
+        return {"profile": store.profile(), "streak": store.streak(), "days": store.days()}
+
+    @app.put("/profile", dependencies=[Depends(auth)])
+    def put_profile(req: ProfileReq):
+        name, subjects = req.name.strip(), list({s.strip().lower(): s.strip() for s in req.subjects if s.strip()}.values())
+        if not name:
+            raise HTTPException(422, "name required")
+        store.set_profile(name, subjects)
+        return {"name": name, "subjects": subjects}
 
     @app.get("/health", dependencies=[Depends(auth)])
     def health():
@@ -135,7 +152,7 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
         with rec_lock:
             if rec["r"]:
                 raise HTTPException(409, "already recording")
-            st = store.create(req.source, req.course)
+            st = store.create(req.source, (req.course or "").strip() or None)
             try:
                 rec["r"] = recorder_cls(req.source, store.dir(st["id"]) / "segments",
                                         lambda v: rec.__setitem__("level", v))
@@ -192,7 +209,10 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
     @app.patch("/lectures/{lid}", dependencies=[Depends(auth)])
     def patch(lid: str, req: PatchReq):
         lecture(lid)
-        return store.update(lid, **req.model_dump(exclude_none=True))
+        kw = req.model_dump(exclude_none=True)
+        if "course" in kw:
+            kw["course"] = kw["course"].strip() or None  # cleared course is no course, not ""
+        return store.update(lid, **kw)
 
     @app.delete("/lectures/{lid}", dependencies=[Depends(auth)])
     def delete(lid: str):
@@ -279,9 +299,10 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
         return store.config()["new_cards_per_day"] - store.new_today()
 
     @app.get("/review/queue", dependencies=[Depends(auth)])
-    def review_queue(course: str | None = None, lecture: str | None = None):
+    def review_queue(course: str | None = None, lecture: str | None = None, practice: bool = False):
         es = {(st["id"], c["id"]): st for st, c in review_entries(course, lecture)}
-        q = cardlib.queue([(st["id"], c) for st, c in review_entries(course, lecture)], date.today(), new_left())
+        entries = [(st["id"], c) for st, c in review_entries(course, lecture)]
+        q = entries if practice else cardlib.queue(entries, date.today(), new_left())  # practice: every card, ignoring schedule
         return {"cards": [{"lecture_id": lid, "title": es[lid, c["id"]]["title"], "course": es[lid, c["id"]]["course"], "card": c} for lid, c in q],
                 "due": len(q), "new_left": max(new_left(), 0)}
 
@@ -293,7 +314,7 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
         left, today = new_left(), date.today()
         courses = [{"course": k or None, "due": len(cardlib.queue(v, today, left))} for k, v in by.items()]
         total = len(cardlib.queue([e for v in by.values() for e in v], today, left))
-        return {"due": total, "courses": courses}
+        return {"due": total, "courses": courses, "streak": store.streak()}
 
     @app.post("/review/answer", dependencies=[Depends(auth)])
     def review_answer(req: AnswerReq):
@@ -308,9 +329,13 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
                     return c, f["cards"][i]
             raise HTTPException(404, "no such card")
         old, new = store.edit_cards(req.lecture_id, answer)
-        if cardlib.is_new(old):
-            store.add_new_today()
+        store.mark_reviewed(new=int(cardlib.is_new(old)))  # one write: new-card count and streak together
         return new
+
+    @app.post("/review/practiced", dependencies=[Depends(auth)])
+    def review_practiced():
+        store.mark_reviewed()  # practice counts toward streak/heatmap but doesn't touch scheduling
+        return {}
 
     @app.websocket("/ws")
     async def ws(sock: WebSocket):

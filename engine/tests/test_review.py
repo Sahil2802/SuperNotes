@@ -1,3 +1,6 @@
+import json
+from datetime import date, timedelta
+
 import yaml
 from fastapi.testclient import TestClient
 
@@ -76,6 +79,28 @@ def test_answer_updates_schedule_and_counts_new_once(tmp_path):
     assert c.get("/review/queue").json()["cards"] == []  # now scheduled for the future
 
 
+def test_streak_counts_consecutive_days(tmp_path):
+    c, s = setup(tmp_path)
+    assert s.streak() == 0
+    lid = lecture(s, ["A"])
+    cid = c.get(f"/lectures/{lid}").json()["flashcards"][0]["id"]
+    c.post("/review/answer", json={"lecture_id": lid, "card_id": cid, "grade": 4})
+    assert c.get("/review/courses").json()["streak"] == 1
+    assert c.get("/profile").json()["days"] == {date.today().isoformat(): 1}
+    c.post("/review/answer", json={"lecture_id": lid, "card_id": cid, "grade": 4})
+    assert c.get("/profile").json()["days"] == {date.today().isoformat(): 2}
+    t = date.today()
+    s._atomic(s.root.parent / "review.json", json.dumps({"date": t.isoformat(), "new": 0, "days": [
+        (t - timedelta(days=n)).isoformat() for n in (0, 1, 2, 4)]}))
+    assert s.streak() == 3  # day 3 missing
+    s._atomic(s.root.parent / "review.json", json.dumps({"date": t.isoformat(), "new": 0, "days": [
+        (t - timedelta(days=n)).isoformat() for n in (1, 2)]}))
+    assert s.streak() == 2  # today not yet reviewed: still alive
+    s._atomic(s.root.parent / "review.json", json.dumps({"date": t.isoformat(), "new": 0, "days": [
+        (t - timedelta(days=2)).isoformat()]}))
+    assert s.streak() == 0
+
+
 def test_answer_rejects_bad_grade(tmp_path):
     c, s = setup(tmp_path)
     lid = lecture(s, ["A"])
@@ -105,3 +130,20 @@ def test_card_write_refused_while_busy(tmp_path):
     c, s = setup(tmp_path)
     lid = lecture(s, ["A"], state="summarize")
     assert c.post(f"/lectures/{lid}/cards", json={"question": "B", "answer": "b"}).status_code == 409
+
+
+def test_profile_roundtrip(tmp_path):
+    c, s = setup(tmp_path)
+    assert c.get("/profile").json()["profile"] is None
+    assert c.put("/profile", json={"name": "  ", "subjects": []}).status_code == 422
+    c.put("/profile", json={"name": " Sam ", "subjects": ["Physics", " ", "Art "]})
+    assert c.get("/profile").json()["profile"] == {"name": "Sam", "subjects": ["Physics", "Art"]}
+
+
+def test_practice_queue_ignores_schedule(tmp_path):
+    c, s = setup(tmp_path)
+    lid = lecture(s, ["A", "B"])
+    cid = c.get(f"/lectures/{lid}").json()["flashcards"][0]["id"]
+    c.post("/review/answer", json={"lecture_id": lid, "card_id": cid, "grade": 4})
+    assert len(c.get("/review/queue").json()["cards"]) == 1
+    assert len(c.get("/review/queue?practice=true").json()["cards"]) == 2

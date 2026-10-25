@@ -6,7 +6,7 @@ import shutil
 import threading
 import time
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import yaml
@@ -149,7 +149,7 @@ class Store:
         except (OSError, ValueError):
             r = {}
         today = date.today().isoformat()
-        return r if r.get("date") == today else {"date": today, "new": 0}
+        return {**r, "new": r.get("new", 0)} if r.get("date") == today else {**r, "date": today, "new": 0}
 
     def new_today(self) -> int:
         with self._lock:
@@ -160,3 +160,39 @@ class Store:
             r = self._review()
             r["new"] += n
             self._atomic(self.root.parent / "review.json", json.dumps(r))
+
+    def profile(self) -> dict | None:
+        try:
+            return json.loads((self.root.parent / "profile.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+
+    def set_profile(self, name: str, subjects: list[str]):
+        with self._lock:
+            self._atomic(self.root.parent / "profile.json", json.dumps({"name": name, "subjects": subjects}, ensure_ascii=False))
+
+    def mark_reviewed(self, new: int = 0):
+        with self._lock:
+            r = self._review()
+            r["new"] += new
+            r["days"] = sorted({*r.get("days", []), r["date"]})
+            r["counts"] = {**r.get("counts", {}), r["date"]: r.get("counts", {}).get(r["date"], 0) + 1}
+            self._atomic(self.root.parent / "review.json", json.dumps(r))
+
+    def days(self) -> dict[str, int]:
+        """Reviewed date -> cards answered. 0 for days recorded before counts existed."""
+        with self._lock:
+            r = self._review()
+        return {d: r.get("counts", {}).get(d, 0) for d in r.get("days", [])}
+
+    def streak(self) -> int:
+        """Consecutive days with a review, ending today (or yesterday, so it survives until you miss a full day)."""
+        with self._lock:
+            days = set(self._review().get("days", []))
+        d = date.today()
+        if d.isoformat() not in days:
+            d -= timedelta(days=1)
+        n = 0
+        while d.isoformat() in days:
+            n, d = n + 1, d - timedelta(days=1)
+        return n
