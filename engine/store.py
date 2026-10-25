@@ -1,6 +1,7 @@
 """Lecture metadata + per-stage status, persisted as <data_dir>/lectures/<id>/status.json."""
 import json
 import shutil
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -18,6 +19,7 @@ DEFAULT_CONFIG = {
 
 class Store:
     def __init__(self, data_dir: Path):
+        self._lock = threading.RLock()  # status.json is read-modify-written from the worker, the API and the UI polls
         self.root = data_dir / "lectures"
         self.root.mkdir(parents=True, exist_ok=True)
         self.config_path = data_dir / "config.yaml"
@@ -46,41 +48,54 @@ class Store:
         return st
 
     def save(self, st: dict):
-        p = self.dir(st["id"]) / "status.json"
-        tmp = p.with_suffix(".tmp")
-        tmp.write_text(json.dumps(st, indent=2))
-        tmp.replace(p)
+        with self._lock:
+            p = self.dir(st["id"]) / "status.json"
+            tmp = p.with_suffix(".tmp")
+            tmp.write_text(json.dumps(st, indent=2))
+            for attempt in range(5):  # Windows: antivirus/indexers can briefly hold the target
+                try:
+                    tmp.replace(p)
+                    return
+                except PermissionError:
+                    if attempt == 4:
+                        raise
+                    time.sleep(0.05)
 
     def get(self, lid: str) -> dict:
-        try:
-            return json.loads((self.dir(lid) / "status.json").read_text())
-        except (OSError, KeyError):
-            raise KeyError(lid)
+        with self._lock:
+            try:
+                return json.loads((self.dir(lid) / "status.json").read_text())
+            except (OSError, ValueError, KeyError):
+                raise KeyError(lid)
 
     def update(self, lid: str, **kw) -> dict:
-        st = self.get(lid)
-        st.update(kw)
-        self.save(st)
-        return st
+        with self._lock:
+            st = self.get(lid)
+            st.update(kw)
+            self.save(st)
+            return st
 
     def set_stage(self, lid: str, stage: str, value: str, **kw) -> dict:
-        st = self.get(lid)
-        st["stages"][stage] = value
-        st.update(kw)
-        self.save(st)
-        return st
+        with self._lock:
+            st = self.get(lid)
+            st["stages"][stage] = value
+            st.update(kw)
+            self.save(st)
+            return st
 
     def list(self) -> list[dict]:
         out = []
-        for d in self.root.iterdir():
-            try:
-                out.append(json.loads((d / "status.json").read_text()))
-            except (OSError, ValueError):
-                pass
+        with self._lock:
+            for d in self.root.iterdir():
+                try:
+                    out.append(json.loads((d / "status.json").read_text()))
+                except (OSError, ValueError):
+                    pass
         return sorted(out, key=lambda s: s["created"], reverse=True)
 
     def delete(self, lid: str):
-        shutil.rmtree(self.dir(lid))
+        with self._lock:
+            shutil.rmtree(self.dir(lid))
 
     def read_json(self, lid: str, name: str, default=None):
         try:
