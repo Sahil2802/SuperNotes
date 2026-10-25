@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import hmac
+import threading
 from pathlib import Path
 
 import httpx
@@ -11,7 +12,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from notes.llm import OLLAMA
-from pipeline import Pipeline
+from pipeline import BUSY, Pipeline
 from store import Store
 
 
@@ -45,6 +46,7 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
     if recorder_cls is None:
         from capture.recorder import Recorder as recorder_cls
     rec = {"r": None, "id": None, "level": 0.0}
+    rec_lock = threading.Lock()  # /record/start runs in the threadpool; opening a device takes a while
 
     app = FastAPI()
     app.state.data_dir = data_dir
@@ -84,17 +86,20 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
 
     @app.post("/record/start", dependencies=[Depends(auth)])
     def record_start(req: StartReq):
-        if rec["r"]:
-            raise HTTPException(409, "already recording")
-        st = store.create(req.source, req.course)
-        try:
-            rec["r"] = recorder_cls(req.source, store.dir(st["id"]) / "segments",
-                                    lambda v: rec.__setitem__("level", v))
-        except Exception as e:
-            store.delete(st["id"])
-            raise HTTPException(400, str(e))
-        rec["id"] = st["id"]
-        return {"lecture_id": st["id"]}
+        if req.source not in ("mic", "loopback", "both"):
+            raise HTTPException(400, f"unknown source {req.source!r}")
+        with rec_lock:
+            if rec["r"]:
+                raise HTTPException(409, "already recording")
+            st = store.create(req.source, req.course)
+            try:
+                rec["r"] = recorder_cls(req.source, store.dir(st["id"]) / "segments",
+                                        lambda v: rec.__setitem__("level", v))
+            except Exception as e:
+                store.delete(st["id"])
+                raise HTTPException(400, str(e))
+            rec["id"] = st["id"]
+            return {"lecture_id": st["id"]}
 
     @app.post("/record/stop", dependencies=[Depends(auth)])
     def record_stop(req: StopReq):
@@ -109,7 +114,7 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
     @app.post("/process/{lid}", dependencies=[Depends(auth)])
     def process(lid: str):
         st = lecture(lid)
-        if st["state"] in ("recording", "queued") or pipe.current == lid:
+        if st["state"] in ("recording", "queued") or pipe.current == lid or rec["id"] == lid:
             raise HTTPException(409, f"lecture is {st['state']}")
         if st["state"] in ("ready", "failed", "cancelled") and st["stages"]["assemble"] == "done":
             pipe.reset(lid)  # explicit re-process
@@ -143,7 +148,7 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
     @app.delete("/lectures/{lid}", dependencies=[Depends(auth)])
     def delete(lid: str):
         lecture(lid)
-        if rec["id"] == lid or pipe.current == lid:
+        if rec["id"] == lid or pipe.current == lid or lecture(lid)["state"] in BUSY:
             raise HTTPException(409, "lecture is in use")
         store.delete(lid)
         return {"ok": True}
@@ -159,8 +164,10 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
 
     @app.delete("/lectures/{lid}/audio", dependencies=[Depends(auth)])
     def delete_audio(lid: str):
-        lecture(lid)
+        st = lecture(lid)
         d = store.dir(lid)
+        if st["state"] not in ("ready", "failed", "cancelled", "recorded") or not (d / "transcript.json").exists():
+            raise HTTPException(409, "audio can only be deleted once the transcript exists and nothing is running")
         (d / "audio.wav").unlink(missing_ok=True)
         for s in (d / "segments").glob("*.wav"):
             s.unlink()
@@ -183,7 +190,7 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
         try:
             while True:
                 r = rec["r"]
-                await sock.send_json({"type": "level", "level": rec["level"], "recording": bool(r),
+                await sock.send_json({"type": "level", "level": rec["level"], "recording": bool(r), "lecture_id": rec["id"],
                                       "seconds": r.seconds if r else 0, "error": r.error if r else None})
                 await asyncio.sleep(0.1)
         except (WebSocketDisconnect, RuntimeError):
