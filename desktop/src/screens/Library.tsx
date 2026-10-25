@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { api, Lecture } from "../api/client";
 import { Sprite } from "../Pixel";
 
@@ -38,6 +39,7 @@ export default function Library({ open }: { open: (id: string) => void }) {
     queryFn: api.lectures,
     refetchInterval: (query) => (query.state.data?.some((l) => !IDLE.includes(l.state)) ? 1500 : 10000),
   });
+  const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: ["lectures"] });
   const del = useMutation({ mutationFn: api.remove, onSuccess: refresh });
   const reprocess = useMutation({ mutationFn: api.process, onSuccess: refresh });
@@ -49,19 +51,33 @@ export default function Library({ open }: { open: (id: string) => void }) {
       {q.data.map((l) => (
         <li key={l.id} className="px-card flex items-center gap-4 p-4">
           <Sprite name="book" size={4} />
+          {editing?.id === l.id ? (
+            <input
+              autoFocus
+              className="px-nick flex-1 border-2 border-edge bg-ink px-2 py-1 font-pixel text-xl text-fg"
+              value={editing.title}
+              onChange={(e) => setEditing({ id: l.id, title: e.target.value })}
+              onBlur={() => setEditing(null)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setEditing(null);
+                if (e.key === "Enter") {
+                  if (editing.title.trim()) rename.mutate({ id: l.id, title: editing.title.trim() });
+                  setEditing(null);
+                }
+              }}
+            />
+          ) : (
           <button className="flex-1 text-left" onClick={() => open(l.id)}>
             <div className="font-pixel text-xl text-fg">{l.title}</div>
             <div className="text-xs text-muted">
               {l.course ?? "No course"} · {new Date(l.created * 1000).toLocaleString()} · {fmtDur(l.duration)}
             </div>
           </button>
+          )}
           <Badge l={l} />
           <button
             className="px-link text-sm"
-            onClick={() => {
-              const t = prompt("Rename lecture", l.title);
-              if (t) rename.mutate({ id: l.id, title: t });
-            }}
+            onClick={() => setEditing({ id: l.id, title: l.title })}
           >
             rename
           </button>

@@ -18,7 +18,7 @@ export type Detail = Lecture & {
 export type Segment = { start: number; end: number; text: string };
 export type Health = {
   ready: boolean;
-  ollama: { reachable: boolean; models: string[]; model: string; model_pulled: boolean };
+  ollama: { reachable: boolean; models: string[]; model: string; model_pulled: boolean; loaded: boolean; loading: boolean; error: string | null };
   whisper: { model: string; present: boolean };
 };
 
@@ -44,6 +44,7 @@ async function call<T>(method: string, path: string, body?: unknown): Promise<T>
 
 export const api = {
   health: () => call<Health>("GET", "/health"),
+  loadModel: () => call("POST", "/model/load"),
   lectures: () => call<Lecture[]>("GET", "/lectures"),
   lecture: (id: string) => call<Detail>("GET", `/lectures/${id}`),
   transcript: (id: string) => call<Segment[]>("GET", `/lectures/${id}/transcript`),

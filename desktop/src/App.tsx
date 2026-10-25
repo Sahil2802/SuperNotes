@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { api, Health } from "./api/client";
 import LectureDetail from "./screens/LectureDetail";
@@ -23,6 +23,21 @@ function Setup({ h }: { h: Health }) {
   );
 }
 
+function ModelStatus({ h }: { h: Health }) {
+  const qc = useQueryClient();
+  const load = useMutation({ mutationFn: api.loadModel, onSuccess: () => qc.invalidateQueries({ queryKey: ["health"] }) });
+  const o = h.ollama;
+  if (!o.reachable || !o.model_pulled) return null; // the setup banner covers these
+  if (o.loaded) return <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 bg-green-400" />model: loaded</span>;
+  if (o.loading || load.isPending)
+    return <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 animate-pulse bg-coin" />model: loading…</span>;
+  return (
+    <button className="px-btn ghost px-3 py-1.5 text-base" title={o.error ?? "Load the model now so the first lecture isn't slow"} onClick={() => load.mutate()}>
+      {o.error ? "Retry load model" : "Load model"}
+    </button>
+  );
+}
+
 export default function App() {
   const [view, setView] = useState<View>({ name: "library" });
   const [theme, setTheme] = useState(() => localStorage.getItem("theme") ?? "dark");
@@ -33,7 +48,7 @@ export default function App() {
   const health = useQuery({
     queryKey: ["health"],
     queryFn: api.health,
-    refetchInterval: (q) => (q.state.data ? 15000 : 700),
+    refetchInterval: (q) => (!q.state.data ? 700 : q.state.data.ollama.loading ? 1000 : 15000),
   });
   const h = health.data;
 
@@ -48,6 +63,7 @@ export default function App() {
             <span className={`h-2.5 w-2.5 ${h ? "bg-green-400" : "animate-pulse bg-coin"}`} />
             engine: {h ? "ready" : "starting…"}
           </span>
+          {h && <ModelStatus h={h} />}
           <button className="px-btn ghost px-3 py-1.5 text-base" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
             {theme === "dark" ? "☀ Light" : "☾ Dark"}
           </button>
@@ -56,7 +72,9 @@ export default function App() {
           </button>
         </div>
       </header>
-      {view.name === "library" && <Banner />}
+      <div hidden={view.name !== "library"}>
+        <Banner />
+      </div>
       {h && (!h.ollama.model_pulled || !h.whisper.present) && <Setup h={h} />}
       {!h ? (
         <p className="font-pixel text-muted">Waiting for the engine…</p>
