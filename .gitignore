@@ -1,0 +1,10 @@
+.venv/
+node_modules/
+dist/
+dist-electron/
+release/
+__pycache__/
+.pytest_cache/
+build/
+.impeccable/
+graphify-out/

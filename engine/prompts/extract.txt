@@ -1,0 +1,8 @@
+From this lecture transcript excerpt, extract study material. Return JSON with:
+- flashcards: question/answer pairs testing important concepts
+- terms: technical terms with short definitions
+- actions: action items, assignments, deadlines, dates, or key formulas mentioned
+Only include things actually present in the excerpt. Use empty lists if there are none.
+
+Transcript:
+{text}

@@ -1,0 +1,4 @@
+You are taking study notes from part of a lecture transcript. Write concise bullet-point notes of the key points, in the order presented. Use only what is in the transcript.
+
+Transcript:
+{text}

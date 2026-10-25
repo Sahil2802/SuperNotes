@@ -1,0 +1,4 @@
+Combine these partial lecture notes into one structured study summary in Markdown. Use `##` headings for topics and bullet points beneath them. Remove repetition. Do not invent content.
+
+Partial notes:
+{text}

@@ -1,0 +1,25 @@
+[project]
+name = "live-notes-engine"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "httpx",
+  "numpy>=2.5.4",
+  "pyaudiowpatch>=0.2.12.9",
+  "faster-whisper>=1.2.1",
+  "genanki>=0.13.1",
+  "pydantic>=2.14.1",
+  "nvidia-cublas-cu12>=12.9.2.10",
+  "nvidia-cudnn-cu12>=9.27.0.42",
+]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.22.3",
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
