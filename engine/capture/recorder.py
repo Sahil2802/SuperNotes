@@ -52,7 +52,10 @@ class Recorder:
         self.source, self.out_dir, self.on_level = source, out_dir, on_level
         self.error: str | None = None
         self.seconds = 0.0
+        self._closed = False
         self._stop = threading.Event()
+        if source not in ("mic", "loopback", "both"):
+            raise RecorderError(f"unknown source {source!r}")
         self._p = pa.PyAudio()
         self._inputs: list[_Input] = []
         try:
@@ -63,14 +66,15 @@ class Recorder:
         except (OSError, LookupError) as e:
             self._close()
             raise RecorderError(f"No usable audio device ({e})") from e
-        if not self._inputs:
-            raise RecorderError(f"unknown source {source!r}")
         self._bufs = [[] for _ in self._inputs]
         self._t0, self._emitted = time.monotonic(), 0
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def _close(self):
+        if self._closed:
+            return
+        self._closed = True
         for i in self._inputs:
             try:
                 i.close()
@@ -119,6 +123,8 @@ class Recorder:
         finally:
             if w:
                 w.close()
+            if self.error:
+                self._close()  # release the mic; otherwise the callbacks queue audio forever
 
     def stop(self) -> float:
         self._stop.set()
