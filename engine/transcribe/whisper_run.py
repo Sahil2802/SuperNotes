@@ -1,9 +1,12 @@
 """Segments -> audio.wav + transcript.json + transcript.vtt via faster-whisper."""
 import gc
+import logging
 import wave
 from pathlib import Path
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 
 def merge_segments(seg_dir: Path, out: Path):
@@ -68,8 +71,8 @@ def transcribe(audio: Path, cfg: dict, cancelled=lambda: False, progress=lambda 
     if device == "cuda":
         try:
             return _run(pcm, cfg, "cuda", "int8_float16", cancelled, progress)
-        except Exception:  # missing/mismatched CUDA libs: fall back to CPU
-            pass
+        except Exception:  # missing/mismatched CUDA libs, OOM: fall back to CPU, but say so
+            log.warning("CUDA transcription failed, retrying on CPU", exc_info=True)
     return _run(pcm, cfg, "cpu", "int8", cancelled, progress)
 
 
