@@ -15,6 +15,16 @@ IDLE = ("recording", "recorded", "ready", "failed", "cancelled")
 BUSY = ("queued", *STAGES)
 
 
+def write_outputs(s: Store, lid: str):
+    """(Re)build notes.md and the Anki deck from the current summary, extraction and edited cards."""
+    d = s.dir(lid)
+    st, ex, segs = s.get(lid), s.read_json(lid, "extract.json"), s.read_json(lid, "transcript.json")
+    ex = {**ex, "flashcards": s.cards(lid)}
+    summary = (d / "summary.md").read_text(encoding="utf-8")
+    (d / "notes.md").write_text(notepack_md(st, summary, segs, ex), encoding="utf-8")
+    write_apkg(st, ex["flashcards"], d / "flashcards.apkg")
+
+
 class Pipeline:
     def __init__(self, store: Store):
         self.store = store
@@ -103,12 +113,10 @@ class Pipeline:
         def do_extract():
             segs = s.read_json(lid, "transcript.json")
             s.write_json(lid, "extract.json", extract(segs, cfg["ollama_model"], stop))
+            s.sync_cards(lid)
 
         def do_assemble():
-            st, ex, segs = s.get(lid), s.read_json(lid, "extract.json"), s.read_json(lid, "transcript.json")
-            summary = (d / "summary.md").read_text(encoding="utf-8")
-            (d / "notes.md").write_text(notepack_md(st, summary, segs, ex), encoding="utf-8")
-            write_apkg(st, ex["flashcards"], d / "flashcards.apkg")
+            write_outputs(s, lid)
 
         stage("transcribe", do_transcribe)
         stage("summarize", do_summarize)

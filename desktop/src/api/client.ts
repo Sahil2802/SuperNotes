@@ -9,9 +9,11 @@ export type Lecture = {
   id: string; title: string; course: string | null; source: string; created: number; duration: number;
   state: string; stages: Record<Stage, string>; error: string | null; progress?: number;
 };
+export type Card = { id: string; question: string; answer: string };
+export type ReviewCard = { lecture_id: string; title: string; course: string | null; card: Card };
 export type Detail = Lecture & {
   summary: string | null; has_audio: boolean;
-  flashcards: { question: string; answer: string }[];
+  flashcards: Card[];
   terms: { term: string; definition: string }[];
   actions: string[];
 };
@@ -54,5 +56,15 @@ export const api = {
   cancel: (id: string) => call("POST", `/process/${id}/cancel`),
   patch: (id: string, p: { title?: string; course?: string }) => call("PATCH", `/lectures/${id}`, p),
   remove: (id: string) => call("DELETE", `/lectures/${id}`),
+  addCard: (id: string, c: { question: string; answer: string }) => call<Card>("POST", `/lectures/${id}/cards`, c),
+  editCard: (id: string, cid: string, p: { question?: string; answer?: string }) => call<Card>("PATCH", `/lectures/${id}/cards/${cid}`, p),
+  deleteCard: (id: string, cid: string) => call("DELETE", `/lectures/${id}/cards/${cid}`),
+  /** course: omit = all courses, "" = lectures with no course. */
+  queue: (f: { course?: string; lecture?: string }) => {
+    const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v !== undefined) as [string, string][]).toString();
+    return call<{ cards: ReviewCard[]; due: number; new_left: number }>("GET", `/review/queue${qs ? `?${qs}` : ""}`);
+  },
+  reviewCourses: () => call<{ due: number; courses: { course: string | null; due: number }[] }>("GET", "/review/courses"),
+  answer: (lecture_id: string, card_id: string, grade: 1 | 3 | 4 | 5) => call("POST", "/review/answer", { lecture_id, card_id, grade }),
   deleteAudio: (id: string) => call("DELETE", `/lectures/${id}/audio`),
 };
