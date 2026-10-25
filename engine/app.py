@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from notes.llm import OLLAMA, load, loaded_models
 import cards as cardlib
 from pipeline import BUSY, Pipeline, write_outputs
+from search import search as run_search
 from store import Store
 
 
@@ -173,6 +174,10 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
     @app.get("/lectures", dependencies=[Depends(auth)])
     def lectures():
         return store.list()
+
+    @app.get("/search", dependencies=[Depends(auth)])
+    def search(q: str = Query(min_length=1), scope: str = Query(default="all", pattern="^(all|names)$")):
+        return run_search(store, q, scope)
 
     @app.get("/lectures/{lid}", dependencies=[Depends(auth)])
     def detail(lid: str):

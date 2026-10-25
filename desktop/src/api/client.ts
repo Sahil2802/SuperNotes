@@ -17,6 +17,7 @@ export type Detail = Lecture & {
   terms: { term: string; definition: string }[];
   actions: string[];
 };
+export type SearchHit = { id: string; title: string; course: string | null; matched: string[]; snippet: string | null };
 export type Segment = { start: number; end: number; text: string };
 export type Health = {
   ready: boolean;
@@ -48,6 +49,7 @@ export const api = {
   health: () => call<Health>("GET", "/health"),
   loadModel: () => call("POST", "/model/load"),
   lectures: () => call<Lecture[]>("GET", "/lectures"),
+  search: (q: string) => call<SearchHit[]>("GET", `/search?q=${encodeURIComponent(q)}`),
   lecture: (id: string) => call<Detail>("GET", `/lectures/${id}`),
   transcript: (id: string) => call<Segment[]>("GET", `/lectures/${id}/transcript`),
   start: (source: string, course?: string) => call<{ lecture_id: string }>("POST", "/record/start", { source, course: course || null }),

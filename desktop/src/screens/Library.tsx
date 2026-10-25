@@ -82,6 +82,12 @@ function Menu({ items }: { items: { label: string; run: () => void; danger?: boo
   );
 }
 
+const highlight = (text: string, words: string[]) => {
+  if (!words.length) return text;
+  const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
+  return text.split(re).map((p, i) => (i % 2 ? <mark key={i} className="bg-coin text-ink">{p}</mark> : p));
+};
+
 export default function Library({ open }: { open: (id: string) => void }) {
   const qc = useQueryClient();
   const q = useQuery({
@@ -95,10 +101,57 @@ export default function Library({ open }: { open: (id: string) => void }) {
   const reprocess = useMutation({ mutationFn: api.process, onSuccess: refresh });
   const rename = useMutation({ mutationFn: (v: { id: string; title: string }) => api.patch(v.id, { title: v.title }), onSuccess: refresh });
 
+  const [text, setText] = useState("");
+  const [scope, setScope] = useState<"all" | "names">("all");
+  const [term, setTerm] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setTerm(text.trim()), 250);
+    return () => clearTimeout(t);
+  }, [text]);
+  const hits = useQuery({ queryKey: ["search", term], queryFn: () => api.search(term), enabled: !!term && scope === "all" });
+
   if (!q.data?.length) return <p className="font-pixel text-lg text-muted">No lectures yet. Hit Record to start one.</p>;
+  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+  const shown = scope === "names" ? q.data.filter((l) => words.every((w) => l.title.toLowerCase().includes(w))) : q.data;
   return (
+    <div className="space-y-4">
+      <div className="flex gap-3">
+        <input
+          className="px-nick flex-1 border-2 border-edge bg-ink px-3 py-2 font-pixel text-lg text-fg"
+          placeholder={scope === "all" ? "Search transcripts, summaries, terms…" : "Search lecture names…"}
+          aria-label="Search lectures"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        {(["all", "names"] as const).map((s) => (
+          <button
+            key={s}
+            aria-pressed={scope === s}
+            className={`px-nick border-2 border-edge px-3 font-pixel text-base ${scope === s ? "bg-coin text-ink" : "text-muted hover:text-coin"}`}
+            onClick={() => setScope(s)}
+          >
+            {s === "all" ? "Everything" : "Names"}
+          </button>
+        ))}
+      </div>
+      {term && scope === "all" ? (
+        <ul className="space-y-4">
+          {hits.data?.map((h) => (
+            <li key={h.id}>
+              <button className="px-card w-full p-4 text-left" onClick={() => open(h.id)}>
+                <div className="font-pixel text-xl text-fg">{h.title}</div>
+                {h.snippet && <div className="mt-1 text-sm text-muted">{highlight(h.snippet, words)}</div>}
+                <div className="mt-1 text-xs text-muted">
+                  {h.course ?? "No course"} · matched in {h.matched.join(", ")}
+                </div>
+              </button>
+            </li>
+          ))}
+          {hits.data?.length === 0 && <p className="font-pixel text-lg text-muted">No matches.</p>}
+        </ul>
+      ) : (
     <ul className="space-y-4">
-      {q.data.map((l) => (
+      {shown.map((l) => (
         <li key={l.id} className="px-card flex items-center gap-4 p-4 focus-within:z-10">
           <Sprite name="book" size={4} />
           {editing?.id === l.id ? (
@@ -135,5 +188,7 @@ export default function Library({ open }: { open: (id: string) => void }) {
         </li>
       ))}
     </ul>
+      )}
+    </div>
   );
 }
