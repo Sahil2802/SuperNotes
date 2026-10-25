@@ -5,6 +5,7 @@ import time
 import httpx
 
 OLLAMA = "http://127.0.0.1:11434"
+NUM_CTX = 8192
 KEEP_ALIVE = "30m"  # keep the model resident between lectures
 CHUNK_CHARS = 8000  # ~2k tokens; leaves room for prompt + output in an 8k context
 
@@ -40,7 +41,7 @@ def chat(model: str, prompt: str, schema: dict | None = None, cancelled=lambda: 
         "model": model,
         "stream": True,
         "keep_alive": KEEP_ALIVE,
-        "options": {"num_ctx": 8192, "temperature": 0.2},
+        "options": {"num_ctx": NUM_CTX, "temperature": 0.2},
         "messages": [
             {"role": "system", "content": "Never use em dashes. Use commas, colons, periods or hyphens instead."},
             {"role": "user", "content": prompt},
@@ -63,7 +64,13 @@ def chat(model: str, prompt: str, schema: dict | None = None, cancelled=lambda: 
 
 def load(model: str):
     """Load the model into memory (no generation) so the first real call doesn't pay the cold start."""
-    r = httpx.post(f"{OLLAMA}/api/generate", json={"model": model, "keep_alive": KEEP_ALIVE}, timeout=600)
+    # same num_ctx as chat(): a different context size makes Ollama reload the model on the first real call
+    body = {"model": model, "keep_alive": KEEP_ALIVE, "options": {"num_ctx": NUM_CTX}}
+    for attempt in range(3):  # a 500 can happen while a previous instance of the model is still unloading
+        r = httpx.post(f"{OLLAMA}/api/generate", json=body, timeout=600)
+        if r.status_code < 500 or attempt == 2:
+            break
+        time.sleep(5)
     r.raise_for_status()
 
 

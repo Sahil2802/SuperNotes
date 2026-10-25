@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from notes.llm import OLLAMA
+from notes.llm import OLLAMA, load, loaded_models
 from pipeline import BUSY, Pipeline
 from store import Store
 
@@ -46,6 +46,7 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
     if recorder_cls is None:
         from capture.recorder import Recorder as recorder_cls
     rec = {"r": None, "id": None, "level": 0.0}
+    model_state = {"loading": False, "error": None}
     rec_lock = threading.Lock()  # /record/start runs in the threadpool; opening a device takes a while
 
     app = FastAPI()
@@ -77,12 +78,35 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
         try:
             models = httpx.get(f"{OLLAMA}/api/tags", timeout=1).json().get("models", [])
             names = [m["name"] for m in models]
+            try:
+                loaded = cfg["ollama_model"] in loaded_models()
+            except httpx.HTTPError:
+                loaded = False
             ollama = {"reachable": True, "models": names, "model": cfg["ollama_model"],
-                      "model_pulled": cfg["ollama_model"] in names}
+                      "model_pulled": cfg["ollama_model"] in names, "loaded": loaded, **model_state}
         except httpx.HTTPError:
-            ollama = {"reachable": False, "models": [], "model": cfg["ollama_model"], "model_pulled": False}
+            ollama = {"reachable": False, "models": [], "model": cfg["ollama_model"], "model_pulled": False,
+                      "loaded": False, **model_state}
         return {"ready": True, "ollama": ollama,
                 "whisper": {"model": cfg["whisper_model"], "present": whisper_present(cfg["whisper_model"])}}
+
+    @app.post("/model/load", dependencies=[Depends(auth)])
+    def model_load():
+        # cold start is ~1 min for an 8B model; do it in the background and let /health report progress
+        if model_state["loading"]:
+            return {"loading": True}
+        model_state.update(loading=True, error=None)
+
+        def run():
+            try:
+                load(store.config()["ollama_model"])
+            except Exception as e:
+                model_state["error"] = f"{type(e).__name__}: {e}"
+            finally:
+                model_state["loading"] = False
+
+        threading.Thread(target=run, daemon=True).start()
+        return {"loading": True}
 
     @app.post("/record/start", dependencies=[Depends(auth)])
     def record_start(req: StartReq):
