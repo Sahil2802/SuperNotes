@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, Lecture } from "../api/client";
-import { Sprite } from "../Pixel";
+import { Dot, Sprite } from "../Pixel";
 
 export const fmtDur = (s: number) => {
   const h = Math.floor(s / 3600);
@@ -10,12 +10,12 @@ export const fmtDur = (s: number) => {
 };
 
 const IDLE = ["ready", "failed", "cancelled", "recorded"];
-const color: Record<string, string> = {
-  ready: "bg-green-400 text-green-950",
-  failed: "bg-red-400 text-red-950",
-  cancelled: "bg-slate-400 text-slate-900",
-  recording: "bg-red-400 text-red-950",
-  recorded: "bg-indigo-200 text-indigo-950",
+const dot: Record<string, string> = {
+  ready: "bg-green-400",
+  failed: "bg-red-400",
+  cancelled: "bg-slate-400",
+  recording: "bg-red-400",
+  recorded: "bg-indigo-300",
 };
 
 const LABEL: Record<string, string> = {
@@ -25,12 +25,62 @@ const LABEL: Record<string, string> = {
   assemble: "assembling",
 };
 
-export const Badge = ({ l }: { l: Lecture }) => (
-  <span className={`cursor-default select-none px-nick font-pixel px-2 py-0.5 text-sm ${color[l.state] ?? "bg-coin text-yellow-950"}`}>
-    {LABEL[l.state] ?? l.state}
-    {l.state === "transcribe" && l.progress ? ` ${Math.round(l.progress * 100)}%` : ""}
-  </span>
-);
+// A colored dot; the step name fades in 400ms after a process starts.
+export const Badge = ({ l }: { l: Lecture }) => {
+  const busy = !IDLE.includes(l.state);
+  const name = LABEL[l.state] ?? l.state;
+  return (
+    <span className="flex items-center gap-2 font-pixel text-sm text-muted">
+      <Dot color={dot[l.state] ?? "bg-coin"} pulse={busy} label={name} />
+      {busy && (
+        <span key={l.state} className="px-label">
+          {name}
+          {l.state === "transcribe" && l.progress ? ` ${Math.round(l.progress * 100)}%` : ""}
+        </span>
+      )}
+    </span>
+  );
+};
+
+function Menu({ items }: { items: { label: string; run: () => void; danger?: boolean }[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button className="flex h-11 w-11 items-center justify-center font-pixel text-2xl leading-none text-muted hover:text-coin" aria-label="Actions" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        ⋮
+      </button>
+      {open && (
+        <div role="menu" className="px-card px-pop absolute! right-0 top-full z-20 mt-2 flex w-44 flex-col p-2">
+          {items.map((it) => (
+            <button
+              key={it.label}
+              role="menuitem"
+              className={`px-3 py-2.5 text-left font-pixel text-base hover:bg-edge/40 ${it.danger ? "mt-1 border-t-2 border-edge pt-3 text-red-400" : "text-fg"}`}
+              onClick={() => {
+                setOpen(false);
+                it.run();
+              }}
+            >
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Library({ open }: { open: (id: string) => void }) {
   const qc = useQueryClient();
@@ -49,7 +99,7 @@ export default function Library({ open }: { open: (id: string) => void }) {
   return (
     <ul className="space-y-4">
       {q.data.map((l) => (
-        <li key={l.id} className="px-card flex items-center gap-4 p-4">
+        <li key={l.id} className="px-card flex items-center gap-4 p-4 focus-within:z-10">
           <Sprite name="book" size={4} />
           {editing?.id === l.id ? (
             <input
@@ -75,20 +125,13 @@ export default function Library({ open }: { open: (id: string) => void }) {
           </button>
           )}
           <Badge l={l} />
-          <button
-            className="px-link text-sm"
-            onClick={() => setEditing({ id: l.id, title: l.title })}
-          >
-            rename
-          </button>
-          {IDLE.includes(l.state) && l.state !== "recording" && (
-            <button className="px-link text-sm" onClick={() => reprocess.mutate(l.id)}>
-              {l.state === "ready" ? "re-process" : "process"}
-            </button>
-          )}
-          <button className="px-link text-sm text-red-400" onClick={() => confirm("Delete this lecture and all its files?") && del.mutate(l.id)}>
-            delete
-          </button>
+          <Menu
+            items={[
+              { label: "Rename", run: () => setEditing({ id: l.id, title: l.title }) },
+              ...(IDLE.includes(l.state) ? [{ label: l.state === "ready" ? "Re-process" : "Process", run: () => reprocess.mutate(l.id) }] : []),
+              { label: "Delete", danger: true, run: () => confirm("Delete this lecture and all its files?") && del.mutate(l.id) },
+            ]}
+          />
         </li>
       ))}
     </ul>

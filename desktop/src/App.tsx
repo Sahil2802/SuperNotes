@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { api, Health } from "./api/client";
 import LectureDetail from "./screens/LectureDetail";
 import Library from "./screens/Library";
-import { Banner, Sprite } from "./Pixel";
+import { Banner, Dot, Sprite } from "./Pixel";
 import Record from "./screens/Record";
 
 type View = { name: "library" } | { name: "record" } | { name: "lecture"; id: string };
@@ -28,9 +28,9 @@ function ModelStatus({ h }: { h: Health }) {
   const load = useMutation({ mutationFn: api.loadModel, onSuccess: () => qc.invalidateQueries({ queryKey: ["health"] }) });
   const o = h.ollama;
   if (!o.reachable || !o.model_pulled) return null; // the setup banner covers these
-  if (o.loaded) return <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 bg-green-400" />model: loaded</span>;
+  if (o.loaded) return <span className="flex items-center gap-2"><Dot color="bg-green-400" label="loaded" size="h-2.5 w-2.5" />model: loaded</span>;
   if (o.loading || load.isPending)
-    return <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 animate-pulse bg-coin" />model: loading…</span>;
+    return <span className="flex items-center gap-2"><Dot color="bg-coin" pulse label="loading" size="h-2.5 w-2.5" />model: loading…</span>;
   return (
     <button className="px-btn ghost px-3 py-1.5 text-base" title={o.error ?? "Load the model now so the first lecture isn't slow"} onClick={() => load.mutate()}>
       {o.error ? "Retry load model" : "Load model"}
@@ -60,7 +60,7 @@ export default function App() {
         </button>
         <div className="flex items-center gap-4 font-pixel text-sm text-muted">
           <span className="flex items-center gap-2">
-            <span className={`h-2.5 w-2.5 ${h ? "bg-green-400" : "animate-pulse bg-coin"}`} />
+            <span className={`h-2.5 w-2.5 rounded-full ${h ? "bg-green-400" : "animate-pulse bg-coin"}`} />
             engine: {h ? "ready" : "starting…"}
           </span>
           {h && <ModelStatus h={h} />}

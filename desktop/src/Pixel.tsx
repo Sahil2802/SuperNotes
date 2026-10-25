@@ -83,3 +83,15 @@ export function Banner() {
     </div>
   );
 }
+
+// Round status dot with a hover tooltip naming the status.
+export function Dot({ color, pulse, label, size = "h-3 w-3" }: { color: string; pulse?: boolean; label: string; size?: string }) {
+  return (
+    <span className="group relative flex cursor-default select-none items-center">
+      <span role="img" aria-label={label} className={`${size} rounded-full ${color} ${pulse ? "px-pulse" : ""}`} />
+      <span className="pointer-events-none absolute bottom-full left-0 z-30 mb-2 whitespace-nowrap border-2 border-edge bg-panel px-2 py-0.5 font-pixel text-sm text-fg opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+        {label}
+      </span>
+    </span>
+  );
+}

@@ -21,6 +21,13 @@
   --color-coin: #ffd60a;
 }
 
+html {
+  scrollbar-width: none; /* hide scrollbar so the layout doesn't shift when content grows tall */
+}
+html::-webkit-scrollbar {
+  display: none;
+}
+
 body {
   background: var(--ink);
   color: var(--fg);
@@ -65,3 +72,14 @@ body {
 .px-link:hover { color: var(--color-coin); }
 
 button:not(:disabled), a[href], input[type="radio"] { cursor: pointer; }
+
+@keyframes px-blink { 50% { opacity: 0.35; } }
+@keyframes px-in { from { opacity: 0; transform: translateX(-6px); } }
+.px-pulse { animation: px-blink 1s steps(1) infinite; }
+.px-label { animation: px-in 0.3s 400ms backwards; }
+@keyframes px-pop { from { opacity: 0; transform: translateY(-4px); } }
+.px-pop { animation: px-pop 0.15s ease-out; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--color-coin); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .px-pulse, .px-label, .px-pop { animation: none; }
+}

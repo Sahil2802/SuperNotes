@@ -48,7 +48,7 @@ export default function Record({ done }: { done: (id: string) => void }) {
       {id && (
         <div className="space-y-2">
           <div className="flex items-center gap-2 font-pixel text-xl text-red-400">
-            <span className="h-3 w-3 animate-pulse bg-red-500" /> Recording {fmtDur(meter.seconds)}
+            <span className="h-3 w-3 animate-pulse rounded-full bg-red-500" /> Recording {fmtDur(meter.seconds)}
           </div>
           <div className="h-4 w-full px-nick overflow-hidden border-2 border-edge bg-black">
             <div className="h-full bg-green-400 transition-[width] duration-100" style={{ width: `${Math.min(100, meter.level * 400)}%` }} />
