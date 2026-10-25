@@ -14,8 +14,10 @@ const SOURCES = [
 export default function Record({ done }: { done: (id: string) => void }) {
   const [source, setSource] = useState("mic");
   const [course, setCourse] = useState("");
-  const [id, setId] = useState<string | null>(null);
+  const [startedId, setId] = useState<string | null>(null);
   const meter = useMeter();
+  // the engine is the source of truth: leaving this screen mid-recording must not lose the stop button
+  const id = startedId ?? (meter.recording ? meter.lecture_id : null);
   const start = useMutation({ mutationFn: () => api.start(source, course), onSuccess: (r) => setId(r.lecture_id) });
   const stop = useMutation({
     mutationFn: async () => {
