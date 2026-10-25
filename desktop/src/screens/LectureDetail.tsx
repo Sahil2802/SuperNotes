@@ -19,6 +19,19 @@ function Flashcards({ cards, id, ready, review }: { cards: Detail["flashcards"];
   const qc = useQueryClient();
   const [flipped, setFlipped] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<string | null>(null);
+  const [menu, setMenu] = useState<string | null>(null); // id of the card whose ⋮ menu is open
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === "Escape" : !(e.target as Element).closest("[data-menu]")) setMenu(null);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [menu]);
   const [draft, setDraft] = useState({ question: "", answer: "" });
   const href = useUrl(`/lectures/${id}/anki`);
   const save = useMutation({
@@ -60,18 +73,23 @@ function Flashcards({ cards, id, ready, review }: { cards: Detail["flashcards"];
       {editing === "new" && <div className="px-card mb-3 p-4">{form(() => save.mutate(() => api.addCard(id, draft)), "Add")}</div>}
       <div className="grid gap-3 sm:grid-cols-2">
         {cards.map((c) => (
-          <div key={c.id} className="px-card min-h-24 p-4">
+          <div key={c.id} className={`px-card min-h-24 p-4 ${menu === c.id ? "z-20" : ""}`}>
             {editing === c.id ? (
               form(() => save.mutate(() => api.editCard(id, c.id, draft)), "Save")
             ) : (
               <>
-                <button className="w-full text-left" onClick={() => toggle(c.id)}>
+                <button className="w-full pr-8 text-left after:absolute after:inset-0" onClick={() => toggle(c.id)}>
                   {flipped.has(c.id) ? <span className="text-green-300">{c.answer}</span> : <span className="font-medium">{c.question}</span>}
                 </button>
                 {ready && (
-                  <div className="mt-2 flex gap-3 text-sm">
-                    <button className="px-link" onClick={() => { setDraft({ question: c.question, answer: c.answer }); setEditing(c.id); }}>edit</button>
-                    <button className="px-link" onClick={() => confirm("Delete this card?") && save.mutate(() => api.deleteCard(id, c.id))}>delete</button>
+                  <div data-menu className="absolute right-2 top-2 z-10">
+                    <button className="px-link px-2 text-lg leading-none" aria-label="Card options" aria-haspopup="menu" aria-expanded={menu === c.id} onClick={() => setMenu(menu === c.id ? null : c.id)}>⋮</button>
+                    {menu === c.id && (
+                      <div role="menu" className="px-card absolute! right-0 top-full mt-1 flex w-28 flex-col py-1 text-sm">
+                        <button role="menuitem" className="px-3 py-1 text-left hover:text-coin" onClick={() => { setMenu(null); setDraft({ question: c.question, answer: c.answer }); setEditing(c.id); }}>Edit</button>
+                        <button role="menuitem" className="px-3 py-1 text-left text-red-400 hover:text-red-300" onClick={() => { setMenu(null); confirm("Delete this card?") && save.mutate(() => api.deleteCard(id, c.id)); }}>Delete</button>
+                      </div>
+                    )}
                   </div>
                 )}
               </>

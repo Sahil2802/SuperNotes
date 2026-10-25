@@ -21,6 +21,13 @@
   --color-coin: #ffd60a;
 }
 
+html {
+  scrollbar-width: none; /* hide scrollbar so the layout doesn't shift when content grows tall */
+}
+html::-webkit-scrollbar {
+  display: none;
+}
+
 body {
   background: var(--ink);
   color: var(--fg);
