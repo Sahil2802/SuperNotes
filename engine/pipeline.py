@@ -11,6 +11,7 @@ from transcribe.whisper_run import merge_segments, transcribe, write_vtt
 
 log = logging.getLogger(__name__)
 IDLE = ("recording", "recorded", "ready", "failed", "cancelled")
+BUSY = ("queued", *STAGES)
 
 
 class Cancelled(Exception):
@@ -36,6 +37,8 @@ class Pipeline:
         self.q.put(lid)
 
     def cancel(self, lid: str):
+        if self.store.get(lid)["state"] not in BUSY:
+            return  # nothing running or queued; don't clobber a finished lecture
         self.cancel_ids.add(lid)
         if self.current != lid:  # still queued
             self.store.update(lid, state="cancelled")
@@ -44,6 +47,13 @@ class Pipeline:
         st = self.store.get(lid)
         st["stages"] = {s: "pending" for s in STAGES}
         self.store.save(st)
+
+    def _mark(self, lid: str, **kw):
+        # the worker must outlive any single lecture: never let a status write kill it
+        try:
+            self.store.update(lid, **kw)
+        except Exception:
+            log.exception("could not record %s for %s", kw.get("state"), lid)
 
     def _worker(self):
         while True:
@@ -55,13 +65,10 @@ class Pipeline:
             try:
                 self._run(lid)
             except Cancelled:
-                self.store.update(lid, state="cancelled")
+                self._mark(lid, state="cancelled")
             except Exception as e:
                 log.exception("pipeline failed for %s", lid)
-                try:
-                    self.store.update(lid, state="failed", error=f"{type(e).__name__}: {e}")
-                except KeyError:  # deleted mid-run
-                    pass
+                self._mark(lid, state="failed", error=f"{type(e).__name__}: {e}")
             finally:
                 self.cancel_ids.discard(lid)
                 self.current = None
