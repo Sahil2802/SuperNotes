@@ -15,7 +15,7 @@ function useUrl(path: string, enabled = true) {
   return u;
 }
 
-function Flashcards({ cards, id }: { cards: Detail["flashcards"]; id: string }) {
+function Flashcards({ cards, id, ready }: { cards: Detail["flashcards"]; id: string; ready: boolean }) {
   const [flipped, setFlipped] = useState<Set<number>>(new Set());
   const href = useUrl(`/lectures/${id}/anki`);
   const toggle = (i: number) =>
@@ -26,9 +26,13 @@ function Flashcards({ cards, id }: { cards: Detail["flashcards"]; id: string }) 
     });
   return (
     <div>
-      <a className="mb-3 inline-block px-btn px-3 py-1.5 text-sm" href={href}>
-        Export to Anki
-      </a>
+      {ready ? (
+        <a className="mb-3 inline-block px-btn px-3 py-1.5 text-sm" href={href}>
+          Export to Anki
+        </a>
+      ) : (
+        <p className="mb-3 text-sm text-muted">Anki export is available once the notes are ready.</p>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         {cards.map((c, i) => (
           <button key={i} className="px-card min-h-24 p-4 text-left hover:[--e:var(--color-coin)]" onClick={() => toggle(i)}>
@@ -125,7 +129,7 @@ export default function LectureDetail({ id, back }: { id: string; back: () => vo
           <p className="text-muted">Not generated yet.</p>
         ))}
       {tab === "Transcript" && <Transcript id={id} hasAudio={d.has_audio} />}
-      {tab === "Flashcards" && <Flashcards cards={d.flashcards} id={id} />}
+      {tab === "Flashcards" && <Flashcards cards={d.flashcards} id={id} ready={d.state === "ready"} />}
       {tab === "Terms & Actions" && (
         <div className="space-y-4">
           <section>
