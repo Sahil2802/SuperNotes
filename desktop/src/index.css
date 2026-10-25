@@ -6,9 +6,11 @@
   --pc: polygon(0px 6px,3px 6px,3px 3px,6px 3px,6px 0px,calc(100% - 6px) 0px,calc(100% - 6px) 3px,calc(100% - 3px) 3px,calc(100% - 3px) 6px,calc(100% - 0px) 6px,calc(100% - 0px) calc(100% - 6px),calc(100% - 3px) calc(100% - 6px),calc(100% - 3px) calc(100% - 3px),calc(100% - 6px) calc(100% - 3px),calc(100% - 6px) calc(100% - 0px),6px calc(100% - 0px),6px calc(100% - 3px),3px calc(100% - 3px),3px calc(100% - 6px),0px calc(100% - 6px));
   --pn: polygon(0px 4px,2px 4px,2px 2px,4px 2px,4px 0px,calc(100% - 4px) 0px,calc(100% - 4px) 2px,calc(100% - 2px) 2px,calc(100% - 2px) 4px,calc(100% - 0px) 4px,calc(100% - 0px) calc(100% - 4px),calc(100% - 2px) calc(100% - 4px),calc(100% - 2px) calc(100% - 2px),calc(100% - 4px) calc(100% - 2px),calc(100% - 4px) calc(100% - 0px),4px calc(100% - 0px),4px calc(100% - 2px),2px calc(100% - 2px),2px calc(100% - 4px),0px calc(100% - 4px));
   --ink: #0a0a23; --panel: #12123a; --edge: #3b3b7a; --fg: #e8e8ff; --muted: #a5b4fc; --shadow: #000;
+  --g1: #1f7a3a; --g2: #2ea043; --g3: #3fb950; --g4: #56d364; /* review heatmap, light → strong */
 }
 :root[data-theme="light"] {
   --ink: #f4f1e8; --panel: #fffdf6; --edge: #1a1a40; --fg: #14142e; --muted: #4a4a85; --shadow: #1a1a40;
+  --g1: #9be9a8; --g2: #40c463; --g3: #30a14e; --g4: #216e39;
 }
 
 @theme inline {
@@ -54,6 +56,12 @@ body {
 .px-card::before, .px-btn::before { inset: 0; background: var(--e); }
 .px-card::after, .px-btn::after { inset: 2px; background: var(--b); }
 .px-nick { clip-path: var(--pn); }
+/* input in a stepped card: soft edge, full edge on focus instead of the rectangular outline */
+:root { --soft-edge: color-mix(in srgb, var(--edge) 45%, var(--ink)); }
+.px-btn.ghost.soft { --e: var(--soft-edge); }
+.px-search { --e: var(--soft-edge); --b: var(--ink); filter: none; }
+.px-search:focus-within { --e: var(--edge); }
+.px-search input:focus-visible { outline: none; }
 
 .px-btn {
   --e: #1a1400; --b: var(--color-coin);

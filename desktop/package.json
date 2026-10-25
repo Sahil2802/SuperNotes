@@ -35,7 +35,7 @@
   },
   "build": {
     "appId": "com.livenotes.app",
-    "productName": "Live Notes",
+    "productName": "Supernotes",
     "files": [
       "dist/**",
       "dist-electron/**",

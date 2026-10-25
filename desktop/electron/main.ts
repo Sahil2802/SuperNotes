@@ -22,13 +22,13 @@ function freePort(): Promise<number> {
 
 function failSidecar(why: string) {
   if (quitting) return;
-  dialog.showErrorBox("Live Notes engine stopped", `${why}
+  dialog.showErrorBox("Supernotes engine stopped", `${why}
 
 Restart the app. Anything already recorded is saved.`);
 }
 
 function startSidecar() {
-  const dataDir = app.getPath("userData");
+  const dataDir = path.join(app.getPath("appData"), "Live Notes"); // pre-rename folder, keeps existing lectures
   const args = ["--port", String(port), "--token", token, "--data-dir", dataDir];
   if (app.isPackaged) {
     const exe = path.join(process.resourcesPath, "engine", "engine.exe");

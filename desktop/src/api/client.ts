@@ -9,7 +9,8 @@ export type Lecture = {
   id: string; title: string; course: string | null; source: string; created: number; duration: number;
   state: string; stages: Record<Stage, string>; error: string | null; progress?: number;
 };
-export type Card = { id: string; question: string; answer: string };
+export type Profile = { name: string; subjects: string[] };
+export type Card ={ id: string; question: string; answer: string };
 export type ReviewCard = { lecture_id: string; title: string; course: string | null; card: Card };
 export type Detail = Lecture & {
   summary: string | null; has_audio: boolean;
@@ -62,11 +63,14 @@ export const api = {
   editCard: (id: string, cid: string, p: { question?: string; answer?: string }) => call<Card>("PATCH", `/lectures/${id}/cards/${cid}`, p),
   deleteCard: (id: string, cid: string) => call("DELETE", `/lectures/${id}/cards/${cid}`),
   /** course: omit = all courses, "" = lectures with no course. */
-  queue: (f: { course?: string; lecture?: string }) => {
+  queue: (f: { course?: string; lecture?: string; practice?: string }) => {
     const qs = new URLSearchParams(Object.entries(f).filter(([, v]) => v !== undefined) as [string, string][]).toString();
     return call<{ cards: ReviewCard[]; due: number; new_left: number }>("GET", `/review/queue${qs ? `?${qs}` : ""}`);
   },
-  reviewCourses: () => call<{ due: number; courses: { course: string | null; due: number }[] }>("GET", "/review/courses"),
+  reviewCourses: () => call<{ due: number; streak: number; courses: { course: string | null; due: number }[] }>("GET", "/review/courses"),
   answer: (lecture_id: string, card_id: string, grade: 1 | 3 | 4 | 5) => call("POST", "/review/answer", { lecture_id, card_id, grade }),
-  deleteAudio: (id: string) => call("DELETE", `/lectures/${id}/audio`),
+  practiced: () => call("POST", "/review/practiced"),
+  profile: () => call<{ profile: Profile | null; streak: number; days: Record<string, number> }>("GET", "/profile"),
+  saveProfile: (p: Profile) => call<Profile>("PUT", "/profile", p),
+  deleteAudio:(id: string) => call("DELETE", `/lectures/${id}/audio`),
 };

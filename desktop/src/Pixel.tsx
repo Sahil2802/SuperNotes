@@ -44,7 +44,7 @@ export function Sprite({ name, size = 4 }: { name: keyof typeof SPRITES; size?: 
   const rows = SPRITES[name];
   return (
     <svg width={rows[0].length * size} height={rows.length * size} viewBox={`0 0 ${rows[0].length} ${rows.length}`} shapeRendering="crispEdges" className="shrink-0" aria-hidden>
-      {rows.flatMap((row, y) => [...row].map((c, x) => (c === "." ? null : <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill={PAL[c]} />)))}
+      {rows.flatMap((row, y) => [...row].map((c, x) => (c === "." ? null : <rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" fill={c === "k" ? "var(--sprite-k, #1a1400)" : PAL[c]} />)))}
     </svg>
   );
 }

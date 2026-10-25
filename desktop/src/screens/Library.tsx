@@ -85,7 +85,7 @@ function Menu({ items }: { items: { label: string; run: () => void; danger?: boo
 const highlight = (text: string, words: string[]) => {
   if (!words.length) return text;
   const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi");
-  return text.split(re).map((p, i) => (i % 2 ? <mark key={i} className="bg-coin text-ink">{p}</mark> : p));
+  return text.split(re).map((p, i) => (i % 2 ? <mark key={i} className="bg-coin text-[#1a1400]">{p}</mark> : p));
 };
 
 export default function Library({ open }: { open: (id: string) => void }) {
@@ -95,11 +95,15 @@ export default function Library({ open }: { open: (id: string) => void }) {
     queryFn: api.lectures,
     refetchInterval: (query) => (query.state.data?.some((l) => !IDLE.includes(l.state)) ? 1500 : 10000),
   });
-  const [editing, setEditing] = useState<{ id: string; title: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; field: "title" | "course"; value: string } | null>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: ["lectures"] });
   const del = useMutation({ mutationFn: api.remove, onSuccess: refresh });
   const reprocess = useMutation({ mutationFn: api.process, onSuccess: refresh });
-  const rename = useMutation({ mutationFn: (v: { id: string; title: string }) => api.patch(v.id, { title: v.title }), onSuccess: refresh });
+  const edit = useMutation({ mutationFn: (v: { id: string; field: "title" | "course"; value: string }) => api.patch(v.id, { [v.field]: v.value }), onSuccess: refresh });
+  const profile = useQuery({ queryKey: ["profile"], queryFn: api.profile });
+  const courseOptions = [...new Set([...(profile.data?.profile?.subjects ?? []), ...(q.data?.map((l) => l.course).filter(Boolean) as string[] ?? [])])];
+
+  const suggestions = editing?.field === "course" ? courseOptions.filter((c) => c.toLowerCase().includes(editing.value.toLowerCase())) : [];
 
   const [text, setText] = useState("");
   const [scope, setScope] = useState<"all" | "names">("all");
@@ -110,24 +114,42 @@ export default function Library({ open }: { open: (id: string) => void }) {
   }, [text]);
   const hits = useQuery({ queryKey: ["search", term], queryFn: () => api.search(term), enabled: !!term && scope === "all" });
 
+  const [view, setView] = useState<"subjects" | "recordings">("subjects");
+  const [subject, setSubject] = useState<string | null>(null); // "" = lectures without a course
+
   if (!q.data?.length) return <p className="font-pixel text-lg text-muted">No lectures yet. Hit Record to start one.</p>;
   const words = text.toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = scope === "names" ? q.data.filter((l) => words.every((w) => l.title.toLowerCase().includes(w))) : q.data;
+  const inSubject = view === "subjects" && subject !== null;
+  const base = inSubject ? q.data.filter((l) => (l.course ?? "") === subject) : q.data;
+  const shown = scope === "names" ? base.filter((l) => words.every((w) => l.title.toLowerCase().includes(w))) : base;
+  const gallery = view === "subjects" && subject === null && !text.trim();
+  const counts = new Map<string, number>();
+  q.data.forEach((l) => counts.set(l.course ?? "", (counts.get(l.course ?? "") ?? 0) + 1));
+  const subjects = [...new Set([...(profile.data?.profile?.subjects ?? []), ...counts.keys()].filter(Boolean)), ...(counts.has("") ? [""] : [])];
   return (
     <div className="space-y-4">
       <div className="flex gap-3">
-        <input
-          className="px-nick flex-1 border-2 border-edge bg-ink px-3 py-2 font-pixel text-lg text-fg"
-          placeholder={scope === "all" ? "Search transcripts, summaries, terms…" : "Search lecture names…"}
-          aria-label="Search lectures"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-        />
+        {([["subjects", "All subjects"], ["recordings", "All recordings"]] as const).map(([v, label]) => (
+          <button key={v} aria-pressed={view === v} className={`px-btn px-3 text-base ${view === v ? "" : "ghost soft"}`} onClick={() => { setView(v); setSubject(null); }}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-3">
+        <div className="px-card px-search flex-1">
+          <input
+            className="w-full bg-transparent px-3 py-2 font-pixel text-lg text-fg"
+            placeholder={scope === "all" ? "Search transcripts, summaries, terms…" : "Search lecture names…"}
+            aria-label="Search lectures"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+        </div>
         {(["all", "names"] as const).map((s) => (
           <button
             key={s}
             aria-pressed={scope === s}
-            className={`px-nick border-2 border-edge px-3 font-pixel text-base ${scope === s ? "bg-coin text-ink" : "text-muted hover:text-coin"}`}
+            className={`px-btn px-3 text-base ${scope === s ? "" : "ghost soft"}`}
             onClick={() => setScope(s)}
           >
             {s === "all" ? "Everything" : "Names"}
@@ -142,52 +164,89 @@ export default function Library({ open }: { open: (id: string) => void }) {
                 <div className="font-pixel text-xl text-fg">{h.title}</div>
                 {h.snippet && <div className="mt-1 text-sm text-muted">{highlight(h.snippet, words)}</div>}
                 <div className="mt-1 text-xs text-muted">
-                  {h.course ?? "No course"} · matched in {h.matched.join(", ")}
+                  {h.course || "No course"} · matched in {h.matched.join(", ")}
                 </div>
               </button>
             </li>
           ))}
           {hits.data?.length === 0 && <p className="font-pixel text-lg text-muted">No matches.</p>}
         </ul>
+      ) : gallery ? (
+        <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          {subjects.map((s) => (
+            <li key={s}>
+              <button className="px-card flex w-full flex-col gap-3 p-4 text-left" onClick={() => setSubject(s)}>
+                <Sprite name="book" size={4} />
+                <div className="font-pixel text-xl text-fg">{s || "No course"}</div>
+                <div className="text-sm text-muted">{counts.get(s) ?? 0} lecture{counts.get(s) === 1 ? "" : "s"}</div>
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : (
+    <>
+    {inSubject && !text.trim() && (
+      <div className="flex items-center gap-3">
+        <button className="px-link text-base" onClick={() => setSubject(null)}>← All subjects</button>
+        <h2 className="font-pixel text-2xl text-fg">{subject || "No course"}</h2>
+      </div>
+    )}
     <ul className="space-y-4">
       {shown.map((l) => (
         <li key={l.id} className="px-card flex items-center gap-4 p-4 focus-within:z-10">
           <Sprite name="book" size={4} />
           {editing?.id === l.id ? (
-            <input
-              autoFocus
-              className="px-nick flex-1 border-2 border-edge bg-ink px-2 py-1 font-pixel text-xl text-fg"
-              value={editing.title}
-              onChange={(e) => setEditing({ id: l.id, title: e.target.value })}
-              onBlur={() => setEditing(null)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") setEditing(null);
-                if (e.key === "Enter") {
-                  if (editing.title.trim()) rename.mutate({ id: l.id, title: editing.title.trim() });
-                  setEditing(null);
-                }
-              }}
-            />
+            <div className="relative flex-1">
+              <div className="px-card px-search">
+                <input
+                  autoFocus
+                  className="w-full bg-transparent px-3 py-1 font-pixel text-xl text-fg"
+                  placeholder={editing.field === "course" ? "Course" : undefined}
+                  value={editing.value}
+                  onChange={(e) => setEditing({ ...editing, value: e.target.value })}
+                  onBlur={() => setEditing(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setEditing(null);
+                    if (e.key === "Enter") {
+                      if (editing.field === "course" || editing.value.trim()) edit.mutate({ ...editing, value: editing.value.trim() });
+                      setEditing(null);
+                    }
+                  }}
+                />
+              </div>
+              {editing.field === "course" && suggestions.length > 0 && (
+                <ul className="px-card left-0 top-full z-10 mt-2 min-w-full py-2" style={{ position: "absolute" }}>
+                  {suggestions.map((c) => (
+                    <li
+                      key={c}
+                      className="cursor-pointer whitespace-nowrap px-4 py-1 font-pixel text-base text-fg hover:bg-edge/40"
+                      onMouseDown={(e) => { e.preventDefault(); edit.mutate({ ...editing, value: c }); setEditing(null); }}
+                    >{c}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
           ) : (
           <button className="flex-1 text-left" onClick={() => open(l.id)}>
             <div className="font-pixel text-xl text-fg">{l.title}</div>
             <div className="text-xs text-muted">
-              {l.course ?? "No course"} · {new Date(l.created * 1000).toLocaleString()} · {fmtDur(l.duration)}
+              {l.course || "No course"} · {new Date(l.created * 1000).toLocaleString()} · {fmtDur(l.duration)}
             </div>
           </button>
           )}
           <Badge l={l} />
           <Menu
             items={[
-              { label: "Rename", run: () => setEditing({ id: l.id, title: l.title }) },
-              ...(IDLE.includes(l.state) ? [{ label: l.state === "ready" ? "Re-process" : "Process", run: () => reprocess.mutate(l.id) }] : []),
+              { label: "Rename", run: () => setEditing({ id: l.id, field: "title", value: l.title }) },
+              { label: "Set course", run: () => setEditing({ id: l.id, field: "course", value: l.course ?? "" }) },
+              ...(IDLE.includes(l.state) ? [{ label: l.state === "ready" ? "Re-process" : "Process", run: () => (l.state !== "ready" || confirm("Re-process this lecture? Its summary and flashcards will be regenerated.")) && reprocess.mutate(l.id) }] : []),
               { label: "Delete", danger: true, run: () => confirm("Delete this lecture and all its files?") && del.mutate(l.id) },
             ]}
           />
         </li>
       ))}
     </ul>
+    </>
       )}
     </div>
   );

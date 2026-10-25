@@ -5,9 +5,10 @@ import LectureDetail from "./screens/LectureDetail";
 import Library from "./screens/Library";
 import { Banner, Dot, Sprite } from "./Pixel";
 import Record from "./screens/Record";
+import Profile, { ProfileForm } from "./screens/Profile";
 import Review from "./screens/Review";
 
-type View = { name: "library" } | { name: "record" } | { name: "lecture"; id: string } | { name: "review"; lecture?: string };
+type View = { name: "library" } | { name: "profile" } |{ name: "record" } | { name: "lecture"; id: string } | { name: "review"; lecture?: string };
 
 function Setup({ h }: { h: Health }) {
   const o = h.ollama;
@@ -54,11 +55,24 @@ export default function App() {
   const h = health.data;
   const due = useQuery({ queryKey: ["review", "courses"], queryFn: api.reviewCourses, enabled: !!h, refetchInterval: 60000 });
 
+  const profile = useQuery({ queryKey: ["profile"], queryFn: api.profile, enabled: !!h });
+
+  if (h && profile.isPending) return null; // avoid flashing the app before we know if onboarding is needed
+
+  if (profile.data && !profile.data.profile && h && h.ollama.model_pulled && h.whisper.present) // after model setup, so Setup stays reachable
+    return (
+      <div className="mx-auto max-w-xl p-6 font-sans">
+        <h1 className="mb-2 font-pixel text-3xl font-bold text-fg">Welcome to Supernotes</h1>
+        <p className="mb-4 text-muted">Two quick questions to get started.</p>
+        <ProfileForm onboarding />
+      </div>
+    );
+
   return (
-    <div className="mx-auto max-w-4xl p-6 font-sans">
-      <header className="mb-8 flex items-center justify-between border-b-2 border-edge pb-4">
+    <div className="font-sans">
+      <header className="mb-8 flex items-center justify-between border-b-2 border-edge px-6 pb-4 pt-6">
         <button className="font-pixel text-3xl font-bold tracking-wide text-fg" onClick={() => setView({ name: "library" })}>
-          <span className="mr-3 inline-block align-middle"><Sprite name="coin" size={4} /></span>Live Notes
+          <span className="mr-3 inline-block align-middle"><Sprite name="coin" size={4} /></span>Supernotes
         </button>
         <div className="flex items-center gap-4 font-pixel text-sm text-muted">
           <span className="flex items-center gap-2">
@@ -66,17 +80,21 @@ export default function App() {
             engine: {h ? "ready" : "starting…"}
           </span>
           {h && <ModelStatus h={h} />}
-          <button className="px-btn ghost px-3 py-1.5 text-base" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-            {theme === "dark" ? "☀ Light" : "☾ Dark"}
+          <button className="px-btn ghost px-3 py-1.5 text-base" title="Toggle theme" aria-label="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            {theme === "dark" ? "☀" : "☾"}
+          </button>
+          <button className="px-btn ghost px-3 py-1.5 text-base" onClick={() => setView({ name: "profile" })}>
+            {profile.data?.profile?.name ?? "Profile"}
           </button>
           <button className="px-btn ghost px-3 py-1.5 text-base" onClick={() => setView({ name: "review" })}>
-            Review{due.data ? ` (${due.data.due})` : ""}
+            Review{due.data ? ` (${due.data.due})` : ""}{due.data?.streak ? ` 🔥${due.data.streak}` : ""}
           </button>
           <button className="px-btn red px-4 py-1.5 text-base" onClick={() => setView({ name: "record" })}>
             ● Record
           </button>
         </div>
       </header>
+      <main className="mx-auto max-w-4xl px-6 pb-6">
       <div hidden={view.name !== "library"}>
         <Banner />
       </div>
@@ -85,13 +103,16 @@ export default function App() {
         <p className="font-pixel text-muted">Waiting for the engine…</p>
       ) : view.name === "library" ? (
         <Library open={(id) => setView({ name: "lecture", id })} />
+      ) : view.name === "profile" ? (
+        <Profile back={() => setView({ name: "library" })} />
       ) : view.name === "record" ? (
-        <Record done={(id) => setView({ name: "lecture", id })} />
+        <Record done={(id) => setView({ name: "lecture", id })} back={() => setView({ name: "library" })} />
       ) : view.name === "review" ? (
         <Review lecture={view.lecture} back={() => setView({ name: "library" })} />
       ) : (
         <LectureDetail id={view.id} back={() => setView({ name: "library" })} review={(lecture) => setView({ name: "review", lecture })} />
       )}
+      </main>
     </div>
   );
 }
