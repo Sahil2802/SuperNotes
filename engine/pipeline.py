@@ -45,7 +45,10 @@ class Pipeline:
 
     def reset(self, lid: str):
         st = self.store.get(lid)
-        st["stages"] = {s: "pending" for s in STAGES}
+        d = self.store.dir(lid)
+        # audio deleted but transcript kept: re-run only the LLM stages
+        keep = not any((d / "segments").glob("seg_*.wav")) and (d / "transcript.json").exists()
+        st["stages"] = {s: "done" if keep and s == "transcribe" else "pending" for s in STAGES}
         self.store.save(st)
 
     def _mark(self, lid: str, **kw):
