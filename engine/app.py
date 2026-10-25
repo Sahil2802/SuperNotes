@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import hmac
 import threading
+from datetime import date
 from pathlib import Path
 
 import httpx
@@ -9,10 +10,11 @@ import uvicorn
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from notes.llm import OLLAMA, load, loaded_models
-from pipeline import BUSY, Pipeline
+import cards as cardlib
+from pipeline import BUSY, Pipeline, write_outputs
 from store import Store
 
 
@@ -28,6 +30,22 @@ class StopReq(BaseModel):
 class PatchReq(BaseModel):
     title: str | None = None
     course: str | None = None
+
+
+class CardReq(BaseModel):
+    question: str = Field(min_length=1)
+    answer: str = Field(min_length=1)
+
+
+class CardPatch(BaseModel):
+    question: str | None = Field(default=None, min_length=1)
+    answer: str | None = Field(default=None, min_length=1)
+
+
+class AnswerReq(BaseModel):
+    lecture_id: str
+    card_id: str
+    grade: int = Field(ge=1, le=5)
 
 
 def whisper_present(model: str) -> bool:
@@ -51,6 +69,7 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
 
     app = FastAPI()
     app.state.data_dir = data_dir
+    app.state.store = store
     # dev server + file:// renderer (origin "null"); the token is required regardless
     app.add_middleware(CORSMiddleware, allow_origins=["null", "http://localhost:5173", "http://127.0.0.1:5173"],
                        allow_methods=["*"], allow_headers=["*"])
@@ -161,7 +180,8 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
         d = store.dir(lid)
         summary = d / "summary.md"
         return {**st, "summary": summary.read_text(encoding="utf-8") if summary.exists() else None,
-                **(store.read_json(lid, "extract.json") or {"flashcards": [], "terms": [], "actions": []}),
+                **{"terms": [], "actions": [], **(store.read_json(lid, "extract.json") or {})},
+                "flashcards": store.cards(lid),
                 "has_audio": (d / "audio.wav").exists()}
 
     @app.patch("/lectures/{lid}", dependencies=[Depends(auth)])
@@ -204,6 +224,88 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
     @app.get("/lectures/{lid}/notes", dependencies=[Depends(auth)])
     def notes(lid: str):
         return file(lid, "notes.md", filename=f"{lid}.md", media_type="text/markdown")
+
+    def edit_cards(lid: str, fn):
+        if lecture(lid)["state"] in BUSY:
+            raise HTTPException(409, "lecture is being processed")
+        out = store.edit_cards(lid, fn)
+        if (store.dir(lid) / "summary.md").exists() and store.read_json(lid, "extract.json"):
+            write_outputs(store, lid)
+        return out
+
+    @app.post("/lectures/{lid}/cards", dependencies=[Depends(auth)])
+    def add_card(lid: str, req: CardReq):
+        def add(f):
+            c = cardlib.merge({"cards": [], "seen": []}, [req.model_dump()])["cards"][0]
+            f["cards"].append(c)
+            return c
+        return edit_cards(lid, add)
+
+    @app.patch("/lectures/{lid}/cards/{cid}", dependencies=[Depends(auth)])
+    def patch_card(lid: str, cid: str, req: CardPatch):
+        def patch_(f):
+            for c in f["cards"]:
+                if c["id"] == cid:
+                    c.update(req.model_dump(exclude_none=True))
+                    return c
+            raise HTTPException(404, "no such card")
+        return edit_cards(lid, patch_)
+
+    @app.delete("/lectures/{lid}/cards/{cid}", dependencies=[Depends(auth)])
+    def delete_card(lid: str, cid: str):
+        def drop(f):
+            if not any(c["id"] == cid for c in f["cards"]):
+                raise HTTPException(404, "no such card")
+            f["cards"] = [c for c in f["cards"] if c["id"] != cid]
+        edit_cards(lid, drop)
+        return {"ok": True}
+
+    def review_entries(course: str | None = None, lid: str | None = None):
+        out = []
+        for st in store.list():
+            if st["state"] != "ready" or (lid and st["id"] != lid):
+                continue
+            if course is not None and (st["course"] or "") != course:
+                continue
+            out += [(st, c) for c in store.cards(st["id"])]
+        return out
+
+    def new_left() -> int:
+        return store.config()["new_cards_per_day"] - store.new_today()
+
+    @app.get("/review/queue", dependencies=[Depends(auth)])
+    def review_queue(course: str | None = None, lecture: str | None = None):
+        es = {(st["id"], c["id"]): st for st, c in review_entries(course, lecture)}
+        q = cardlib.queue([(st["id"], c) for st, c in review_entries(course, lecture)], date.today(), new_left())
+        return {"cards": [{"lecture_id": lid, "title": es[lid, c["id"]]["title"], "course": es[lid, c["id"]]["course"], "card": c} for lid, c in q],
+                "due": len(q), "new_left": max(new_left(), 0)}
+
+    @app.get("/review/courses", dependencies=[Depends(auth)])
+    def review_courses():
+        by: dict[str, list] = {}
+        for st, c in review_entries():
+            by.setdefault(st["course"] or "", []).append((st["id"], c))
+        left, today = new_left(), date.today()
+        courses = [{"course": k or None, "due": len(cardlib.queue(v, today, left))} for k, v in by.items()]
+        total = len(cardlib.queue([e for v in by.values() for e in v], today, left))
+        return {"due": total, "courses": courses}
+
+    @app.post("/review/answer", dependencies=[Depends(auth)])
+    def review_answer(req: AnswerReq):
+        if req.grade not in (1, 3, 4, 5):
+            raise HTTPException(422, "grade must be 1, 3, 4 or 5")
+        lecture(req.lecture_id)
+
+        def answer(f):
+            for i, c in enumerate(f["cards"]):
+                if c["id"] == req.card_id:
+                    f["cards"][i] = cardlib.grade(c, req.grade, date.today())
+                    return c, f["cards"][i]
+            raise HTTPException(404, "no such card")
+        old, new = store.edit_cards(req.lecture_id, answer)
+        if cardlib.is_new(old):
+            store.add_new_today()
+        return new
 
     @app.websocket("/ws")
     async def ws(sock: WebSocket):
