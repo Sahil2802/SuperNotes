@@ -15,29 +15,68 @@ function useUrl(path: string, enabled = true) {
   return u;
 }
 
-function Flashcards({ cards, id, ready }: { cards: Detail["flashcards"]; id: string; ready: boolean }) {
-  const [flipped, setFlipped] = useState<Set<number>>(new Set());
+function Flashcards({ cards, id, ready, review }: { cards: Detail["flashcards"]; id: string; ready: boolean; review: () => void }) {
+  const qc = useQueryClient();
+  const [flipped, setFlipped] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState({ question: "", answer: "" });
   const href = useUrl(`/lectures/${id}/anki`);
-  const toggle = (i: number) =>
+  const save = useMutation({
+    mutationFn: (f: () => Promise<unknown>) => f(),
+    onSuccess: () => {
+      setEditing(null);
+      qc.invalidateQueries({ queryKey: ["lecture", id] });
+      qc.invalidateQueries({ queryKey: ["review"] });
+    },
+  });
+  const toggle = (cid: string) =>
     setFlipped((s) => {
       const n = new Set(s);
-      if (!n.delete(i)) n.add(i);
+      if (!n.delete(cid)) n.add(cid);
       return n;
     });
+  const form = (submit: () => void, label: string) => (
+    <div className="space-y-2">
+      <input className="w-full bg-transparent border-2 border-edge p-2" placeholder="Question" value={draft.question} onChange={(e) => setDraft({ ...draft, question: e.target.value })} />
+      <textarea className="w-full bg-transparent border-2 border-edge p-2" placeholder="Answer" value={draft.answer} onChange={(e) => setDraft({ ...draft, answer: e.target.value })} />
+      <div className="flex gap-3 text-sm">
+        <button className="px-btn px-3 py-1" disabled={!draft.question.trim() || !draft.answer.trim() || save.isPending} onClick={submit}>{label}</button>
+        <button className="px-link" onClick={() => setEditing(null)}>Cancel</button>
+      </div>
+    </div>
+  );
   return (
     <div>
-      {ready ? (
-        <a className="mb-3 inline-block px-btn px-3 py-1.5 text-sm" href={href}>
-          Export to Anki
-        </a>
-      ) : (
-        <p className="mb-3 text-sm text-muted">Anki export is available once the notes are ready.</p>
-      )}
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        {ready ? (
+          <a className="px-btn px-3 py-1.5 text-sm" href={href}>Export to Anki</a>
+        ) : (
+          <p className="text-sm text-muted">Anki export, review and editing are available once the notes are ready.</p>
+        )}
+        {ready && cards.length > 0 && <button className="px-btn px-3 py-1.5 text-sm" onClick={review}>Review this lecture</button>}
+        {ready && <button className="px-link text-sm" onClick={() => { setDraft({ question: "", answer: "" }); setEditing("new"); }}>+ Add card</button>}
+      </div>
+      {save.error && <p className="mb-2 text-sm text-red-400">{String(save.error.message)}</p>}
+      {editing === "new" && <div className="px-card mb-3 p-4">{form(() => save.mutate(() => api.addCard(id, draft)), "Add")}</div>}
       <div className="grid gap-3 sm:grid-cols-2">
-        {cards.map((c, i) => (
-          <button key={i} className="px-card min-h-24 p-4 text-left hover:[--e:var(--color-coin)]" onClick={() => toggle(i)}>
-            {flipped.has(i) ? <span className="text-green-300">{c.answer}</span> : <span className="font-medium">{c.question}</span>}
-          </button>
+        {cards.map((c) => (
+          <div key={c.id} className="px-card min-h-24 p-4">
+            {editing === c.id ? (
+              form(() => save.mutate(() => api.editCard(id, c.id, draft)), "Save")
+            ) : (
+              <>
+                <button className="w-full text-left" onClick={() => toggle(c.id)}>
+                  {flipped.has(c.id) ? <span className="text-green-300">{c.answer}</span> : <span className="font-medium">{c.question}</span>}
+                </button>
+                {ready && (
+                  <div className="mt-2 flex gap-3 text-sm">
+                    <button className="px-link" onClick={() => { setDraft({ question: c.question, answer: c.answer }); setEditing(c.id); }}>edit</button>
+                    <button className="px-link" onClick={() => confirm("Delete this card?") && save.mutate(() => api.deleteCard(id, c.id))}>delete</button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         ))}
       </div>
       {!cards.length && <p className="text-muted">No flashcards.</p>}
@@ -69,7 +108,7 @@ function Transcript({ id, hasAudio }: { id: string; hasAudio: boolean }) {
   );
 }
 
-export default function LectureDetail({ id, back }: { id: string; back: () => void }) {
+export default function LectureDetail({ id, back, review }: { id: string; back: () => void; review: (id: string) => void }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Summary");
   const q = useQuery({
@@ -129,7 +168,7 @@ export default function LectureDetail({ id, back }: { id: string; back: () => vo
           <p className="text-muted">Not generated yet.</p>
         ))}
       {tab === "Transcript" && <Transcript id={id} hasAudio={d.has_audio} />}
-      {tab === "Flashcards" && <Flashcards cards={d.flashcards} id={id} ready={d.state === "ready"} />}
+      {tab === "Flashcards" && <Flashcards cards={d.flashcards} id={id} ready={d.state === "ready"} review={() => review(id)} />}
       {tab === "Terms & Actions" && (
         <div className="space-y-4">
           <section>

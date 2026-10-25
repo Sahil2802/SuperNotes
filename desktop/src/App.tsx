@@ -5,8 +5,9 @@ import LectureDetail from "./screens/LectureDetail";
 import Library from "./screens/Library";
 import { Banner, Sprite } from "./Pixel";
 import Record from "./screens/Record";
+import Review from "./screens/Review";
 
-type View = { name: "library" } | { name: "record" } | { name: "lecture"; id: string };
+type View = { name: "library" } | { name: "record" } | { name: "lecture"; id: string } | { name: "review"; lecture?: string };
 
 function Setup({ h }: { h: Health }) {
   const o = h.ollama;
@@ -51,6 +52,7 @@ export default function App() {
     refetchInterval: (q) => (!q.state.data ? 700 : q.state.data.ollama.loading ? 1000 : 15000),
   });
   const h = health.data;
+  const due = useQuery({ queryKey: ["review", "courses"], queryFn: api.reviewCourses, enabled: !!h, refetchInterval: 60000 });
 
   return (
     <div className="mx-auto max-w-4xl p-6 font-sans">
@@ -67,6 +69,9 @@ export default function App() {
           <button className="px-btn ghost px-3 py-1.5 text-base" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
             {theme === "dark" ? "☀ Light" : "☾ Dark"}
           </button>
+          <button className="px-btn ghost px-3 py-1.5 text-base" onClick={() => setView({ name: "review" })}>
+            Review{due.data ? ` (${due.data.due})` : ""}
+          </button>
           <button className="px-btn red px-4 py-1.5 text-base" onClick={() => setView({ name: "record" })}>
             ● Record
           </button>
@@ -82,8 +87,10 @@ export default function App() {
         <Library open={(id) => setView({ name: "lecture", id })} />
       ) : view.name === "record" ? (
         <Record done={(id) => setView({ name: "lecture", id })} />
+      ) : view.name === "review" ? (
+        <Review lecture={view.lecture} back={() => setView({ name: "library" })} />
       ) : (
-        <LectureDetail id={view.id} back={() => setView({ name: "library" })} />
+        <LectureDetail id={view.id} back={() => setView({ name: "library" })} review={(lecture) => setView({ name: "review", lecture })} />
       )}
     </div>
   );
