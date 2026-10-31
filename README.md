@@ -95,4 +95,4 @@ Issues and pull requests are welcome. Please run `uv run pytest` in `engine/` an
 
 ## License
 
-No license has been chosen yet. Add a `LICENSE` file (MIT is a common default) before publishing, and update this section.
+[MIT](LICENSE)
