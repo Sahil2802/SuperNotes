@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, Profile as P } from "../api/client";
+import { Avatar, AvatarEditor } from "../Avatar";
 
 /** First-launch onboarding (`onboarding`) and the Profile screen share this form. */
 export function ProfileForm({ initial, onboarding, done }: { initial?: P; onboarding?: boolean; done?: () => void }) {
@@ -109,7 +110,7 @@ export default function Profile({ back }: { back: () => void }) {
     <div className="space-y-6">
       <button className="px-link text-base" onClick={back}>← Back</button>
       <div className="flex items-center gap-4">
-        <div className="px-card flex h-16 w-16 items-center justify-center font-pixel text-3xl text-coin">{p.name[0]?.toUpperCase()}</div>
+        <div className="px-card flex items-center justify-center p-2"><Avatar look={p.avatar} size={4} /></div>
         <input
           aria-label="Name"
           className="border-b-2 border-transparent bg-transparent font-pixel text-3xl font-bold text-fg hover:border-edge focus:border-coin focus:outline-none"
@@ -127,6 +128,7 @@ export default function Profile({ back }: { back: () => void }) {
           </div>
         ))}
       </div>
+      <AvatarEditor profile={p} onChange={(avatar) => save({ ...p, avatar })} />
       <Heatmap days={q.data?.days ?? {}} />
       <section>
         <h3 className="mb-3 font-pixel text-xl text-fg">Subjects</h3>

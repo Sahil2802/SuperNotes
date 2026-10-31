@@ -167,9 +167,12 @@ class Store:
         except (OSError, ValueError):
             return None
 
-    def set_profile(self, name: str, subjects: list[str]):
+    def set_profile(self, name: str, subjects: list[str], avatar: dict | None = None) -> dict:
         with self._lock:
-            self._atomic(self.root.parent / "profile.json", json.dumps({"name": name, "subjects": subjects}, ensure_ascii=False))
+            avatar = avatar or (self.profile() or {}).get("avatar")
+            p = {"name": name, "subjects": subjects, **({"avatar": avatar} if avatar else {})}
+            self._atomic(self.root.parent / "profile.json", json.dumps(p, ensure_ascii=False))
+            return p
 
     def mark_reviewed(self, new: int = 0):
         with self._lock:

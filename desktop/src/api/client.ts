@@ -9,7 +9,7 @@ export type Lecture = {
   id: string; title: string; course: string | null; source: string; created: number; duration: number;
   state: string; stages: Record<Stage, string>; error: string | null; progress?: number;
 };
-export type Profile = { name: string; subjects: string[] };
+export type Profile = { name: string; subjects: string[]; avatar?: Record<string, string | number> };
 export type Card ={ id: string; question: string; answer: string };
 export type ReviewCard = { lecture_id: string; title: string; course: string | null; card: Card };
 export type Detail = Lecture & {
@@ -54,6 +54,7 @@ export const api = {
   lecture: (id: string) => call<Detail>("GET", `/lectures/${id}`),
   transcript: (id: string) => call<Segment[]>("GET", `/lectures/${id}/transcript`),
   start: (source: string, course?: string) => call<{ lecture_id: string }>("POST", "/record/start", { source, course: course || null }),
+  pause: (lecture_id: string, paused: boolean) => call<{ paused: boolean }>("POST", "/record/pause", { lecture_id, paused }),
   stop: (lecture_id: string) => call<{ duration: number; error: string | null }>("POST", "/record/stop", { lecture_id }),
   process: (id: string) => call("POST", `/process/${id}`),
   cancel: (id: string) => call("POST", `/process/${id}/cancel`),

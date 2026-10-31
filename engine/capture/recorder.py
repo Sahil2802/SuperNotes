@@ -54,6 +54,7 @@ class Recorder:
         self.seconds = 0.0
         self._closed = False
         self._stop = threading.Event()
+        self.paused = False
         if source not in ("mic", "loopback", "both"):
             raise RecorderError(f"unknown source {source!r}")
         self._p = pa.PyAudio()
@@ -107,6 +108,15 @@ class Recorder:
         seg, w, written = 0, None, 0
         try:
             while not self._stop.is_set():
+                if self.paused:
+                    t = time.monotonic()
+                    time.sleep(BLOCK)
+                    self._t0 += time.monotonic() - t  # paused time doesn't count toward the wall clock
+                    for i, buf in zip(self._inputs, self._bufs):
+                        buf.clear()
+                        while not i.q.empty():
+                            i.q.get_nowait()
+                    continue
                 x = self._block()
                 if w is None:
                     w = wave.open(str(self.out_dir / f"seg_{seg:05d}.wav"), "wb")

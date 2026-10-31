@@ -176,7 +176,7 @@ export default function Library({ open }: { open: (id: string) => void }) {
           {subjects.map((s) => (
             <li key={s}>
               <button className="px-card flex w-full flex-col gap-3 p-4 text-left" onClick={() => setSubject(s)}>
-                <Sprite name="book" size={4} />
+                <Sprite name="folder" size={6} />
                 <div className="font-pixel text-xl text-fg">{s || "No course"}</div>
                 <div className="text-sm text-muted">{counts.get(s) ?? 0} lecture{counts.get(s) === 1 ? "" : "s"}</div>
               </button>
@@ -186,7 +186,7 @@ export default function Library({ open }: { open: (id: string) => void }) {
       ) : (
     <>
     {inSubject && !text.trim() && (
-      <div className="flex items-center gap-3">
+      <div className="space-y-2">
         <button className="px-link text-base" onClick={() => setSubject(null)}>← All subjects</button>
         <h2 className="font-pixel text-2xl text-fg">{subject || "No course"}</h2>
       </div>

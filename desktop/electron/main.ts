@@ -28,7 +28,7 @@ Restart the app. Anything already recorded is saved.`);
 }
 
 function startSidecar() {
-  const dataDir = path.join(app.getPath("appData"), "Live Notes"); // pre-rename folder, keeps existing lectures
+  const dataDir = path.join(app.getPath("appData"), "live-notes-desktop"); // pre-rename folder (old package name), keeps existing lectures
   const args = ["--port", String(port), "--token", token, "--data-dir", dataDir];
   if (app.isPackaged) {
     const exe = path.join(process.resourcesPath, "engine", "engine.exe");

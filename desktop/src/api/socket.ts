@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { url } from "./client";
 
-export type Meter = { level: number; recording: boolean; lecture_id: string | null; seconds: number; error: string | null };
+export type Meter = { level: number; recording: boolean; lecture_id: string | null; seconds: number; paused: boolean; error: string | null };
 
 export function useMeter(): Meter {
-  const [m, setM] = useState<Meter>({ level: 0, recording: false, lecture_id: null, seconds: 0, error: null });
+  const [m, setM] = useState<Meter>({ level: 0, recording: false, lecture_id: null, seconds: 0, paused: false, error: null });
   useEffect(() => {
     let ws: WebSocket | undefined;
     let dead = false;

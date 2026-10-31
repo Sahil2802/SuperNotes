@@ -46,7 +46,8 @@ export default function Record({ done, back }: { done: (id: string) => void; bac
     },
     onSuccess: () => done(id!),
   });
-  const err = (start.error ?? stop.error) as Error | null;
+  const pause = useMutation({ mutationFn: () => api.pause(id!, !meter.paused) });
+  const err = (start.error ?? stop.error ?? pause.error) as Error | null;
 
   return (
     <div className="space-y-4">
@@ -78,7 +79,7 @@ export default function Record({ done, back }: { done: (id: string) => void; bac
       {id && (
         <div className="space-y-2">
           <div className="flex items-center gap-2 font-pixel text-xl text-red-400">
-            <span className="h-3 w-3 animate-pulse rounded-full bg-red-500" /> Recording {fmtDur(meter.seconds)}
+            <span className={`h-3 w-3 rounded-full bg-red-500 ${meter.paused ? "" : "animate-pulse"}`} /> {meter.paused ? "Paused" : "Recording"} {fmtDur(meter.seconds)}
           </div>
           <div className="h-4 w-full px-nick overflow-hidden border-2 border-edge bg-black">
             <div className="h-full bg-green-400 transition-[width] duration-100" style={{ width: `${Math.min(100, meter.level * 400)}%` }} />
@@ -87,6 +88,11 @@ export default function Record({ done, back }: { done: (id: string) => void; bac
         </div>
       )}
       {err && <p className="text-sm text-red-400">{err.message}</p>}
+      {id && (
+        <button className="px-btn ghost mr-3 px-6 py-3 text-xl disabled:opacity-50" disabled={pause.isPending || stop.isPending} onClick={() => pause.mutate()}>
+          {meter.paused ? "▶ Resume" : "❚❚ Pause"}
+        </button>
+      )}
       <button
         className={`px-btn ${id ? "ghost" : "red"} px-6 py-3 text-xl disabled:opacity-50`}
         disabled={start.isPending || stop.isPending}

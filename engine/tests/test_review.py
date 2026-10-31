@@ -138,6 +138,9 @@ def test_profile_roundtrip(tmp_path):
     assert c.put("/profile", json={"name": "  ", "subjects": []}).status_code == 422
     c.put("/profile", json={"name": " Sam ", "subjects": ["Physics", " ", "Art "]})
     assert c.get("/profile").json()["profile"] == {"name": "Sam", "subjects": ["Physics", "Art"]}
+    c.put("/profile", json={"name": "Sam", "subjects": [], "avatar": {"hair": 2}})
+    c.put("/profile", json={"name": "Sam", "subjects": []})  # omitting avatar keeps it
+    assert c.get("/profile").json()["profile"]["avatar"] == {"hair": 2}
 
 
 def test_practice_queue_ignores_schedule(tmp_path):

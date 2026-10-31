@@ -28,6 +28,10 @@ class StopReq(BaseModel):
     lecture_id: str
 
 
+class PauseReq(StopReq):
+    paused: bool
+
+
 class PatchReq(BaseModel):
     title: str | None = None
     course: str | None = None
@@ -52,6 +56,7 @@ class AnswerReq(BaseModel):
 class ProfileReq(BaseModel):
     name: str = Field(min_length=1)
     subjects: list[str] = []
+    avatar: dict[str, str | int] | None = None  # character look; omitted = keep the saved one
 
 
 def whisper_present(model: str) -> bool:
@@ -106,8 +111,7 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
         name, subjects = req.name.strip(), list({s.strip().lower(): s.strip() for s in req.subjects if s.strip()}.values())
         if not name:
             raise HTTPException(422, "name required")
-        store.set_profile(name, subjects)
-        return {"name": name, "subjects": subjects}
+        return store.set_profile(name, subjects, req.avatar)
 
     @app.get("/health", dependencies=[Depends(auth)])
     def health():
@@ -171,6 +175,13 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
         rec.update(r=None, id=None, level=0.0)
         store.update(lid, duration=round(duration, 1), state="recorded", error=r.error)
         return {"duration": duration, "error": r.error}
+
+    @app.post("/record/pause", dependencies=[Depends(auth)])
+    def record_pause(req: PauseReq):
+        if not rec["r"] or rec["id"] != req.lecture_id:
+            raise HTTPException(409, "not recording that lecture")
+        rec["r"].paused = req.paused
+        return {"paused": req.paused}
 
     @app.post("/process/{lid}", dependencies=[Depends(auth)])
     def process(lid: str):
@@ -347,7 +358,7 @@ def create_app(token: str, data_dir: Path, pipeline: Pipeline | None = None, rec
             while True:
                 r = rec["r"]
                 await sock.send_json({"type": "level", "level": rec["level"], "recording": bool(r), "lecture_id": rec["id"],
-                                      "seconds": r.seconds if r else 0, "error": r.error if r else None})
+                                      "seconds": r.seconds if r else 0, "paused": bool(r and getattr(r, "paused", False)), "error": r.error if r else None})
                 await asyncio.sleep(0.1)
         except (WebSocketDisconnect, RuntimeError):
             pass

@@ -1,5 +1,5 @@
 const PAL: Record<string, string> = {
-  k: "#1a1400", y: "#ffd60a", o: "#e8a200", w: "#ffffff", r: "#ff4d6d", d: "#a3203a", g: "#6ee7a0", b: "#6366f1", p: "#c4b5fd",
+  k: "#1a1400", y: "#ffd60a", o: "#e8a200", w: "#ffffff", r: "#ff4d6d", d: "#a3203a", g: "#6ee7a0", b: "#6366f1", p: "#c4b5fd", u: "#5bbcf7", n: "#3b8de0",
 };
 
 const SPRITES = {
@@ -27,6 +27,18 @@ const SPRITES = {
     "kbwwwwwwbk",
     "kbbbbbbbbk",
     ".kkkkkkkk.",
+  ],
+  folder: [
+    "..kkkkk.......",
+    ".knnnnnk......",
+    "kkkkkkkkkkkkkk",
+    "kuuuuuuuuuuuuk",
+    "kuuuuuuuuuuuuk",
+    "kuuuuuuuuuuuuk",
+    "kuuuuuuuuuuuuk",
+    "kuuuuuuuuuuuuk",
+    "kuuuuuuuuuuuuk",
+    ".kkkkkkkkkkkk.",
   ],
   coin: [
     "..kkkk..",
